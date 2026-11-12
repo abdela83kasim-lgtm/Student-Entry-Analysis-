@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OSU Report Studio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#EAF0ED;--panel:#fff;--ink:#17262B;--mut:#5B6B70;--line:#D3DDD9;--g:#0F4C3A;--g2:#1F7A5C;--gold:#E0A526;--blue:#2F7F9E;--rose:#B8456B;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0D1513;--panel:#16221F;--ink:#E7EFEC;--mut:#9DB0AA;--line:#2A3B37}}
+:root[data-theme="dark"]{--bg:#0D1513;--panel:#16221F;--ink:#E7EFEC;--mut:#9DB0AA;--line:#2A3B37}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Public Sans",system-ui,sans-serif}
+.app{display:grid;grid-template-columns:268px 1fr;min-height:100vh}
+.side{background:var(--g);color:#E4F1EB;padding:22px 18px;position:sticky;top:0;height:100vh;overflow:auto}
+.brand{font:700 20px/1.2 "Source Serif 4",Georgia,serif;margin-bottom:4px}
+.brand-sub{font-size:13px;color:#9CC7B7;margin-bottom:20px}
+.side h3{font-size:13px;font-weight:600;color:#9CC7B7;margin:24px 0 8px}
+.side ul{list-style:none;margin:0;padding:0}
+.side li{display:flex;align-items:center;border-radius:8px}
+.side li button.open{flex:1;text-align:left;background:none;border:0;color:inherit;font:inherit;padding:8px 10px;cursor:pointer;border-radius:8px;min-width:0}
+.side li button.open span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.side li button.open small{color:#8DB8A8;font-size:12px}
+.side li.cur{background:rgba(255,255,255,.14);box-shadow:inset 3px 0 0 var(--gold)}
+.side li:hover{background:rgba(255,255,255,.09)}
+.side .del{background:none;border:0;color:#9CC7B7;cursor:pointer;font-size:18px;padding:6px 10px}
+.side label{display:flex;gap:9px;align-items:center;padding:5px 2px;font-size:14px;cursor:pointer}
+.side input[type=checkbox]{accent-color:var(--gold);width:16px;height:16px}
+.btn{font:600 14px "Public Sans",sans-serif;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:9px 14px;border-radius:8px;cursor:pointer}
+.btn:hover{border-color:var(--g2)}
+.btn.pri{background:var(--gold);border-color:var(--gold);color:#2A1E00}
+.btn.dark{background:var(--g);border-color:var(--g);color:#fff}
+.side .btn{width:100%}
+button:focus-visible,input:focus-visible,label:focus-within{outline:3px solid var(--gold);outline-offset:2px}
+main{min-width:0;padding:0 24px 60px}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--bg);padding:16px 0 14px;border-bottom:1px solid var(--line);margin-bottom:24px}
+.bar input{flex:1 1 240px;min-width:0;font:700 18px "Source Serif 4",Georgia,serif;background:transparent;color:var(--ink);border:1px solid transparent;border-radius:8px;padding:7px 10px}
+.bar input:hover{border-color:var(--line)}
+#state{font-size:13px;color:var(--mut);min-width:130px}
+#state.dirty{color:#B7791F;font-weight:600}
+.paper{background:#fff;color:#17262B;max-width:860px;margin:0 auto;box-shadow:0 1px 3px rgba(0,0,0,.12),0 12px 36px rgba(0,0,0,.1);font-size:14px}
+.paper.editing{outline:3px dashed var(--gold);outline-offset:6px}
+.editing p:hover,.editing li:hover,.editing h2:hover,.editing td:hover,.editing h1:hover{background:rgba(224,165,38,.14)}
+.editing :focus{outline:2px solid var(--gold);outline-offset:1px;background:#FFF8E5}
+.rh{background:var(--g);color:#fff;padding:36px 48px 28px;border-bottom:6px solid var(--gold)}
+.rh .org{font-size:13px;color:#A9D3C2;margin:0 0 10px}
+.rh h1{font:700 34px/1.15 "Source Serif 4",Georgia,serif;margin:0 0 14px}
+.rh p{margin:0;color:#CFE6DC;font-size:13px}
+.paper section{padding:26px 48px 4px}
+.paper h2{font:700 21px/1.25 "Source Serif 4",Georgia,serif;color:var(--g);margin:0 0 10px}
+.paper p{margin:0 0 12px;max-width:72ch}
+.off{display:none!important}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0;border-top:1px solid #D3DDD9;border-bottom:1px solid #D3DDD9}
+.kpis div{padding:14px 10px 14px 0;margin:0 12px 0 0;border-left:3px solid var(--gold);padding-left:12px}
+.kpis b{font-size:24px}
+.kpis b{display:block;font:700 24px/1.1 "Source Serif 4",Georgia,serif;color:var(--g)}
+.kpis span{font-size:12.5px;color:#5B6B70;display:block;margin-top:4px}
+.tw{overflow-x:auto;margin:6px 0 14px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{text-align:left;font-weight:600;color:#fff;background:var(--g2);padding:7px 10px;white-space:nowrap}
+td{padding:6px 10px;border-bottom:1px solid #E1E8E5}
+th.n,td.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.tot td{font-weight:700;border-top:2px solid var(--g);background:#F1F6F4}
+figure{margin:8px 0 14px}
+figcaption{font-size:12.5px;color:#5B6B70;margin-top:4px}
+.sm table{font-size:10.5px}.sm td,.sm th{padding:4px 6px}thead{display:table-header-group}
+svg{width:100%;height:auto;display:block}
+.gl{stroke:#E1E8E5;stroke-width:1}.ax{font-size:11px;fill:#5B6B70}.lb{font-size:12px;fill:#17262B;font-weight:600}
+.lg{display:flex;gap:16px;font-size:12.5px;margin-top:6px}.lg i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.paper ol,.paper ul{padding-left:22px;margin:0 0 12px}.paper li{margin-bottom:8px;max-width:72ch}
+.rf{margin:22px 48px 0;padding:14px 0 28px;border-top:1px solid #D3DDD9;font-size:12px;color:#5B6B70}
+.views{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0 0}
+.views button{flex:1 1 auto;font:600 13px "Public Sans",sans-serif;padding:8px 6px;border-radius:8px;border:1px solid rgba(255,255,255,.3);background:none;color:#E4F1EB;cursor:pointer}
+.views button[aria-pressed=true]{background:var(--gold);border-color:var(--gold);color:#2A1E00}
+#vt{display:none;flex:1 1 240px;font:700 18px "Source Serif 4",Georgia,serif}
+#deptview,#dataview,.dat #paper,.dat #sech,.dat #secs,.dat #name,.dat #state,.dat #edit,.dat #save,.dat #copy,.dat #reset,.dat #deptview,.dept #dataview,.dept #paper,.dept #sech,.dept #secs,.dept #name,.dept #state,.dept #edit,.dept #save,.dept #copy,.dept #reset{display:none}
+.dept #deptview{display:block}.dat #dataview{display:block}.dept #vt,.dat #vt{display:block}
+.dctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:20px 48px 0}
+.dctl input,.dctl select{max-width:100%;font:14px "Public Sans",sans-serif;padding:9px 12px;border:1px solid #BFCDC8;border-radius:8px;background:#fff;color:#17262B}
+.dctl input{flex:1 1 220px;min-width:0}.dctl span{font-size:13px;color:#5B6B70}
+.dbody{padding:12px 48px 40px}
+.sb{all:unset;cursor:pointer;font-weight:600;white-space:nowrap}.sb:focus-visible{outline:2px solid var(--gold)}
+.dbody td.empty{text-align:center;color:#5B6B70;padding:24px}
+.act{display:none}.editing .act{display:table-cell}.editing p.act{display:block}
+.rowdel{border:0;background:#F6D9D9;color:#A12A2A;border-radius:6px;cursor:pointer;font-size:15px;line-height:1;padding:3px 9px}
+.addrow .addr{background:var(--g2);border-color:var(--g2);color:#fff}
+.ac{white-space:nowrap}.paper .lnk{background:none;border:0;color:var(--g2);font:600 13px "Public Sans",sans-serif;cursor:pointer;padding:2px 6px;text-decoration:underline}.paper .lnk.dl{color:#B3261E}
+.dnote{flex-basis:100%;margin:0;font-size:12.5px;color:#5B6B70}
+dialog{border:0;border-radius:12px;padding:22px;max-width:540px;width:calc(100% - 32px);background:var(--panel);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+dialog h2{font:700 20px "Source Serif 4",Georgia,serif;margin:0 0 14px}
+#df{display:grid;grid-template-columns:1fr 1fr;gap:12px}#df label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600}#df label.w{grid-column:1/-1}
+#df input{font:14px "Public Sans",sans-serif;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+.dhint{font-size:12.5px;color:var(--mut);margin:12px 0 0}.derr{color:#C0392B;font-size:13px;min-height:20px;margin:10px 0 0}.dbtn{display:flex;justify-content:flex-end;gap:8px}
+@media (max-width:860px){.app{display:block}.side{position:static;height:auto}main{padding:0 12px 40px}.rh,.paper section{padding-left:20px;padding-right:20px}.rf{margin:18px 20px 0}.rh h1{font-size:26px}}
+@media print{
+ .ac,.act{display:none!important}
+ .dctl{display:none!important}.dbody{padding:0 0 10px}
+ @page{size:A4;margin:14mm 12mm}
+ :root{padding:0}
+ body{background:#fff}
+ .side,.bar{display:none!important}.dept #deptview .rh,#deptview .rh{margin-bottom:6px}
+ .app{display:block}main{padding:0}
+ .paper{box-shadow:none;max-width:none;outline:0!important}
+ .paper section,figure,tr{break-inside:avoid}
+ .paper h2{break-after:avoid}
+ *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+@media (prefers-reduced-motion:no-preference){.btn{transition:border-color .15s}}
+</style>
+</head>
+<body>
+<div class="app">
+ <aside class="side" aria-label="Reports">
+  <div class="brand">OSU Report Studio</div>
+  <div class="brand-sub">Oromia State University</div>
+  <button class="btn pri" id="new">New report</button>
+  <div class="views" role="group" aria-label="View"><button id="vrep" aria-pressed="true">Report</button><button id="vdep" aria-pressed="false">Department list</button><button id="vdat" aria-pressed="false">Data</button></div>
+  <h3>Saved reports</h3>
+  <ul id="list"></ul>
+  <h3 id="sech">Sections in this report</h3>
+  <div id="secs"></div>
+ </aside>
+ <main>
+  <div class="bar">
+   <span id="vt">Department list</span>
+   <input id="name" aria-label="Report name" value="">
+   <span id="state" role="status" aria-live="polite"></span>
+   <button class="btn" id="edit" aria-pressed="false">Edit report</button>
+   <button class="btn dark" id="save">Save changes</button>
+   <button class="btn" id="copy">Save as copy</button>
+   <button class="btn" id="print">Print report</button>
+   <button class="btn" id="reset">Rebuild report</button>
+  </div>
+  <article class="paper" id="paper" spellcheck="false"></article>
+  <article class="paper dv" id="deptview">
+   <header class="rh"><p class="org">Oromia State University</p><h1>Department list</h1><p>All departments and programmes from the Departments sheet, with new entrants by year of entry.</p></header>
+   <div class="dctl"><input id="dq" type="search" placeholder="Search department" aria-label="Search department"><select id="dl" aria-label="Filter by program level"><option value="">All program levels</option></select><span id="dc" role="status"></span><button class="btn dark" id="dadd">Add department</button><button class="btn" id="dreset">Reset to Excel data</button><p class="dnote" id="dn1">Edit, delete or add rows. Changes are saved in this browser. To use them in a report, open the Report and click Rebuild report.</p></div>
+   <div id="dtable" class="dbody"></div>
+  </article>
+  <article class="paper dv" id="dataview">
+   <header class="rh"><p class="org">Oromia State University</p><h1>Data</h1><p>All records from the Data sheet: new entrants by year, program, department, study mode and campus.</p></header>
+   <div class="dctl"><input id="xq" type="search" placeholder="Search department, program or campus" aria-label="Search records"><select id="xy" aria-label="Filter by year"><option value="">All years</option></select><select id="xp" aria-label="Filter by program"><option value="">All programs</option></select><select id="xm" aria-label="Filter by study mode"><option value="">All study modes</option></select><span id="xc" role="status"></span><button class="btn dark" id="xadd">Add record</button><button class="btn" id="xreset">Reset to Excel data</button><p class="dnote" id="dn2">Edit, delete or add rows. Changes are saved in this browser. To use them in a report, open the Report and click Rebuild report.</p></div>
+   <div id="xtable" class="dbody"></div>
+  </article>
+ </main>
+</div>
+<dialog id="dlg" aria-labelledby="dt"><h2 id="dt"></h2><div id="df"></div><p id="dh" class="dhint"></p><p id="de" class="derr" role="alert"></p><div class="dbtn"><button class="btn" id="dcancel">Cancel</button><button class="btn dark" id="dsave">Save</button></div></dialog>
+<script>
+const REC0=[[2014,"1st Degree (Applied)","Law","Regular",null,6,1,7,"'2014'!C9"],[2014,"1st Degree (Applied)","Law","Weekend","Adama",11,5,16,"'2014'!O9"],[2014,"1st Degree (Applied)","Law","Weekend","Burayu",13,5,18,"'2014'!X9"],[2014,"1st Degree (Applied)","Law","Weekend","Sebeta",19,9,28,"'2014'!AJ9"],[2014,"1st Degree (Applied)","Law","Weekend","Shashamane",34,4,38,"'2014'!AP9"],[2014,"1st Degree (Applied)","Computer Science","Extension",null,null,null,null,"'2014'!F10"],[2014,"1st Degree (Applied)","Computer Science","Regular",null,null,null,null,"'2014'!C10"],[2014,"1st Degree (Applied)","Natural Resource Management","Winter",null,105,31,136,"'2014'!I17"],[2014,"1st Degree (Applied)","Cooperative Business Management","Winter",null,44,10,54,"'2014'!I18"],[2015,"1st Degree (Applied)","Accounting","Extension",null,9,8,17,"'2015'!F6"],[2015,"1st Degree (Applied)","Accounting","Regular",null,7,8,15,"'2015'!C6"],[2015,"1st Degree (Applied)","Accounting","Weekend","Sebeta",21,11,32,"'2015'!AJ6"],[2015,"1st Degree (Applied)","Management","Extension",null,21,11,32,"'2015'!F7"],[2015,"1st Degree (Applied)","Management","Regular",null,9,3,12,"'2015'!C7"],[2015,"1st Degree (Applied)","Management","Weekend","Bishoftu",9,13,22,"'2015'!U7"],[2015,"1st Degree (Applied)","Management","Weekend","Burayu",12,4,16,"'2015'!X7"],[2015,"1st Degree (Applied)","Management","Weekend","Meki",14,15,29,"'2015'!AD7"],[2015,"1st Degree (Applied)","Management","Weekend","Sebeta",17,8,25,"'2015'!AJ7"],[2015,"1st Degree (Applied)","Law","Weekend","Adama",10,3,13,"'2015'!O9"],[2015,"1st Degree (Applied)","Law","Weekend","Sebeta",13,4,17,"'2015'!AJ9"],[2015,"1st Degree (Applied)","Law","Weekend","Shashamane",12,2,14,"'2015'!AP9"],[2015,"1st Degree (Applied)","Computer Science","Regular",null,11,1,12,"'2015'!C10"],[2015,"1st Degree (Applied)","Oromo Folklore and Afan Oromo","Weekend","Sebeta",7,5,12,"'2015'!AJ12"],[2015,"1st Degree (Applied)","Natural Resource Management","Winter",null,57,27,84,"'2015'!I17"],[2015,"1st Degree (Applied)","Cooperative Business Management","Winter",null,22,14,36,"'2015'!I18"],[2015,"PhD","PhD in Development Studies","Regular",null,5,0,5,"'2015'!C37"],[2015,"PhD","PhD in Leadership and Management","Regular",null,4,0,4,"'2015'!C38"],[2016,"1st Degree (Applied)","Accounting","Extension",null,7,9,16,"'2016'!F6"],[2016,"1st Degree (Applied)","Accounting","Regular",null,27,8,35,"'2016'!C6"],[2016,"1st Degree (Applied)","Accounting","Weekend","Sebeta",15,12,27,"'2016'!AJ6"],[2016,"1st Degree (Applied)","Management","Extension",null,26,8,34,"'2016'!F7"],[2016,"1st Degree (Applied)","Management","Regular",null,57,13,70,"'2016'!C7"],[2016,"1st Degree (Applied)","Management","Weekend","Batu",14,3,17,"'2016'!R7"],[2016,"1st Degree (Applied)","Management","Weekend","Bishoftu",13,8,21,"'2016'!U7"],[2016,"1st Degree (Applied)","Management","Weekend","Burayu",19,5,24,"'2016'!X7"],[2016,"1st Degree (Applied)","Management","Weekend","Meki",34,13,47,"'2016'!AD7"],[2016,"1st Degree (Applied)","Management","Weekend","Sebeta",19,15,34,"'2016'!AJ7"],[2016,"1st Degree (Applied)","Management","Weekend","Sululta",12,1,13,"'2016'!AM7"],[2016,"1st Degree (Applied)","Law","Weekend","Bishoftu",16,2,18,"'2016'!U9"],[2016,"1st Degree (Applied)","Law","Weekend","Lega Tafo",19,6,25,"'2016'!AG9"],[2016,"1st Degree (Applied)","Law","Weekend","Sebeta",15,3,18,"'2016'!AJ9"],[2016,"1st Degree (Applied)","Information Technology","Regular",null,3,1,4,"'2016'!C11"],[2016,"1st Degree (Applied)","Oromo Folklore and Afan Oromo","Weekend","Batu",17,5,22,"'2016'!R12"],[2016,"1st Degree (Applied)","Oromo Folklore and Afan Oromo","Weekend","Sebeta",7,5,12,"'2016'!AJ12"],[2016,"1st Degree (Applied)","Economics","Regular",null,14,2,16,"'2016'!C15"],[2016,"1st Degree (Applied)","Economics","Weekend","Sebeta",12,6,18,"'2016'!AJ15"],[2016,"1st Degree (Applied)","Natural Resource Management","Winter",null,57,25,82,"'2016'!I17"],[2016,"1st Degree (Applied)","Cooperative Business Management","Winter",null,36,28,64,"'2016'!I18"],[2017,"1st Degree (Applied)","Accounting","Extension",null,7,4,11,"'2017'!F6"],[2017,"1st Degree (Applied)","Accounting","Regular",null,11,15,26,"'2017'!C6"],[2017,"1st Degree (Applied)","Management","Extension",null,45,14,59,"'2017'!F7"],[2017,"1st Degree (Applied)","Management","Regular",null,25,29,54,"'2017'!C7"],[2017,"1st Degree (Applied)","Management","Weekend","Batu",9,4,13,"'2017'!R7"],[2017,"1st Degree (Applied)","Management","Weekend","Meki",17,3,20,"'2017'!AD7"],[2017,"1st Degree (Applied)","Law","Regular",null,13,4,17,"'2017'!C9"],[2017,"1st Degree (Applied)","Computer Science","Extension",null,21,10,31,"'2017'!F10"],[2017,"1st Degree (Applied)","Computer Science","Regular",null,27,7,34,"'2017'!C10"],[2017,"1st Degree (Applied)","Information Technology","Regular",null,24,7,31,"'2017'!C11"],[2017,"1st Degree (Applied)","Oromo Folklore and Afan Oromo","Regular",null,8,1,9,"'2017'!C12"],[2017,"1st Degree (Applied)","Economics","Regular",null,10,4,14,"'2017'!C15"],[2017,"1st Degree (Applied)","Agri-Business and Value Chain Management","Regular",null,24,5,29,"'2017'!C16"],[2017,"1st Degree (Applied)","Natural Resource Management","Winter",null,23,13,36,"'2017'!I17"],[2017,"1st Degree (Applied)","Cooperative Business Management","Winter",null,24,14,38,"'2017'!I18"],[2017,"Masters","MBA","Weekend","Batu",18,7,25,"'2017'!R31"],[2017,"Masters","MBA","Weekend","Bishoftu",16,3,19,"'2017'!U31"],[2017,"Masters","Project Mgt","Regular",null,9,1,10,"'2017'!C32"],[2017,"Masters","Project Mgt","Weekend","Batu",18,2,20,"'2017'!R32"],[2017,"Masters","Project Mgt","Weekend","Finfine",22,4,26,"'2017'!AA32"],[2017,"PhD","PhD in Development Studies","Regular",null,8,0,8,"'2017'!C37"],[2017,"PhD","PhD in Leadership and Management","Regular",null,8,0,8,"'2017'!C38"],[2018,"1st Degree (Applied)","Accounting","Extension",null,13,3,16,"'2018'!F6"],[2018,"1st Degree (Applied)","Accounting","Regular",null,13,11,24,"'2018'!C6"],[2018,"1st Degree (Applied)","Management","Extension",null,16,6,22,"'2018'!F7"],[2018,"1st Degree (Applied)","Management","Regular",null,13,3,16,"'2018'!C7"],[2018,"1st Degree (Applied)","Law","Regular",null,11,1,12,"'2018'!C9"],[2018,"1st Degree (Applied)","Computer Science","Extension",null,19,9,28,"'2018'!F10"],[2018,"1st Degree (Applied)","Computer Science","Regular",null,14,7,21,"'2018'!C10"],[2018,"1st Degree (Applied)","Information Technology","Regular",null,10,11,21,"'2018'!C11"],[2018,"1st Degree (Applied)","Oromo Folklore and Afan Oromo","Regular","Hin Jiru",null,null,null,null],[2018,"1st Degree (Applied)","Governance and Development Studies","Regular",null,8,2,10,"'2018'!C14"],[2018,"1st Degree (Applied)","Agri-Business and Value Chain Management","Regular",null,17,4,21,"'2018'!C16"],[2018,"1st Degree (Applied)","Natural Resource Management","Winter",null,24,10,34,"'2018'!I17"],[2018,"1st Degree (Applied)","Cooperative Business Management","Winter",null,51,12,63,"'2018'!I18"],[2018,"1st Degree (Education)","BED in Afaan Oromoo","Regular",null,27,10,37,"'2018'!C19"],[2018,"1st Degree (Education)","BED in English","Regular",null,53,5,58,"'2018'!C20"],[2018,"1st Degree (Education)","BED in Mathematics","Regular",null,25,3,28,"'2018'!C21"],[2018,"1st Degree (Education)","BED in Physics","Regular",null,21,4,25,"'2018'!C22"],[2018,"1st Degree (Education)","BED in Information Technology","Regular",null,86,20,106,"'2018'!C23"],[2018,"1st Degree (Education)","BED in History","Regular",null,32,2,34,"'2018'!C24"],[2018,"1st Degree (Education)","BED in Geography","Regular",null,30,2,32,"'2018'!C25"],[2018,"1st Degree (Education)","BED in Economics","Regular",null,84,5,89,"'2018'!C26"],[2018,"Diploma and Certificate","Diploma","Summer",null,248,446,694,"'2018'!L28"],[2018,"Diploma and Certificate","Certificate","Summer",null,78,712,790,"'2018'!L29"],[2018,"Masters","MBA","Regular",null,5,2,7,"'2018'!C31"],[2018,"Masters","MBA","Weekend","Batu",32,12,44,"'2018'!R31"],[2018,"Masters","MBA","Weekend","Bishoftu",19,6,25,"'2018'!U31"],[2018,"Masters","MBA","Weekend","Burayu",0,0,0,"'2018'!X31"],[2018,"Masters","MBA","Weekend","Finfine",19,6,25,"'2018'!AA31"],[2018,"Masters","MBA","Weekend","Sebeta",15,2,17,"'2018'!AJ31"],[2018,"Masters","MBA","Weekend","Shashamane",0,0,0,"'2018'!AP31"],[2018,"Masters","Project Mgt","Regular",null,2,2,4,"'2018'!C32"],[2018,"Masters","Project Mgt","Weekend","Batu",28,10,38,"'2018'!R32"],[2018,"Masters","Project Mgt","Weekend","Bishoftu",13,4,17,"'2018'!U32"],[2018,"Masters","Project Mgt","Weekend","Burayu",17,0,17,"'2018'!X32"],[2018,"Masters","Project Mgt","Weekend","Finfine",23,3,26,"'2018'!AA32"],[2018,"Masters","Project Mgt","Weekend","Shashamane",12,2,14,"'2018'!AP32"],[2018,"Masters","Agri-Leadership","Regular",null,2,2,4,"'2018'!C33"],[2018,"Masters","Development Economics","Regular",null,6,0,6,"'2018'!C34"],[2018,"Masters","Development Economics","Weekend","Batu",12,1,13,"'2018'!R34"],[2018,"PhD","PhD in Development Studies","Regular",null,5,0,5,"'2018'!C37"],[2018,"PhD","PhD in Leadership and Management","Regular",null,11,1,12,"'2018'!C38"],[2018,"PhD","PhD in Economics","Regular",null,5,0,5,"'2018'!C40"]];
+let REC=JSON.parse(JSON.stringify(REC0)),DEPT=[];
+try{const s=JSON.parse(localStorage.getItem('osu-data-v1')||'null');if(s&&Array.isArray(s.REC))REC=s.REC}catch(e){}
+const saveLists=()=>{try{localStorage.setItem('osu-data-v1',JSON.stringify({REC}));return true}catch(e){return false}};
+const Y=[2014,2015,2016,2017,2018];
+const sum=a=>a.reduce((x,y)=>x+y,0);
+let R,R18,M,F,T,LV,MO,G18,G18M,CP,exTot,LF,SEC={};
+const fmt=n=>n.toLocaleString('en-US'),pc=x=>isFinite(x)?(x*100).toFixed(1)+'%':'–',dash=n=>n?fmt(n):'–';
+const sg=x=>!isFinite(x)?'–':(x>=0?'+':'−')+Math.abs(x*100).toFixed(1)+'%';
+const by=(rows,f)=>Y.map(y=>sum(rows.filter(r=>r.y===y).map(f)));
+const tt=r=>r.M+r.F;
+const LVN=['1st Degree (Applied)','1st Degree (Education)','Diploma and Certificate','Masters','PhD'],MON=['Regular','Extension','Winter','Summer','Weekend'];
+const g18=rows=>[sum(rows.map(r=>r.M)),sum(rows.map(r=>r.F))];
+const fp=(m,f)=>m+f?pc(f/(m+f)):'–';
+const dTot=rows=>{const c=[2,3,4,5,6,7].map(i=>fmt(sum(rows.map(r=>r[i])))),w=rows.filter(r=>r[8]!=null),t=sum(w.map(r=>r[6]));return [...c,t?pc(sum(w.map(r=>r[8]*r[6]))/t):'–']};
+function derive(){
+ R=REC.map(r=>({y:r[0],p:r[1],d:r[2],m:r[3],c:r[4],M:r[5]||0,F:r[6]||0}));
+ M=by(R,r=>r.M);F=by(R,r=>r.F);T=M.map((m,i)=>m+F[i]);
+ LV=LVN.map(l=>[l,by(R.filter(r=>r.p===l),tt)]);MO=MON.map(l=>[l,by(R.filter(r=>r.m===l),tt)]);
+ R18=R.filter(r=>r.y===2018);
+ G18=LVN.map(l=>[l,...g18(R18.filter(r=>r.p===l))]);G18M=MON.map(l=>[l,...g18(R18.filter(r=>r.m===l))]);
+ const cm=new Map();R.filter(r=>r.m==='Weekend'&&r.c).forEach(r=>{if(!cm.has(r.c))cm.set(r.c,[]);cm.get(r.c).push(r)});
+ CP=[...cm].map(([c,rows])=>({c,a:by(rows,tt),f:sum(rows.map(r=>r.F)),m:sum(rows.map(r=>r.M))})).sort((a,b)=>sum(b.a)-sum(a.a));
+ exTot=by(R.filter(r=>r.p==='Diploma and Certificate'||r.p==='1st Degree (Education)'),tt);LF=T.map((t,i)=>t-exTot[i]);
+ DEPT=deptRows().map(x=>[x.d,x.p,...x.a,x.all,x.f]);
+}
+const rt=r=>(r[5]||0)+(r[6]||0);
+function deptRows(){
+ const m=new Map();REC.forEach(r=>{const k=r[2]+'|'+r[1];if(!m.has(k))m.set(k,[]);m.get(k).push(r)});
+ const lv=p=>{const i=LVN.indexOf(p);return i<0?99:i};
+ return [...m].map(([k,rs])=>{const a=Y.map(y=>sum(rs.filter(r=>r[0]===y).map(rt))),r18=rs.filter(r=>r[0]===2018),t18=sum(r18.map(rt));
+  return {d:rs[0][2],p:rs[0][1],a,all:sum(a),f:t18?sum(r18.map(r=>r[6]||0))/t18:null}}).sort((x,y)=>lv(x.p)-lv(y.p)||y.all-x.all);
+}
+function applyDept(old,name,lvl,yrs){
+ if(old)REC.forEach(r=>{if(r[2]===old.d&&r[1]===old.p){r[2]=name;r[1]=lvl}});
+ const key=r=>r[2]===name&&r[1]===lvl;
+ Y.forEach((y,i)=>{
+  const rs=REC.filter(r=>key(r)&&r[0]===y),cur=sum(rs.map(rt)),want=yrs[i];if(want===cur)return;
+  const all=REC.filter(key),tm=sum(all.map(r=>r[5]||0)),tf=sum(all.map(r=>r[6]||0)),sh=tm+tf?tf/(tm+tf):0;let d=want-cur;
+  if(!rs.length){const fe=Math.round(want*sh);REC.push([y,lvl,name,'Regular',null,want-fe,fe,want,null]);return}
+  [...rs].sort((a,b)=>rt(b)-rt(a)).forEach(r=>{if(!d)return;const t=rt(r),nt=Math.max(0,t+d);d-=nt-t;const fe=Math.round(nt*(t?(r[6]||0)/t:sh));r[5]=nt-fe;r[6]=fe;r[7]=nt});
+ });
+}
+const tbl=(h,r,left=[0],cls='')=>`<div class="tw ${cls}"><table><thead><tr>${h.map((x,i)=>`<th${left.includes(i)?'':' class="n"'}>${x}</th>`).join('')}</tr></thead><tbody>${r.join('')}</tbody></table></div>`;
+const tr=(c,t,left=[0])=>`<tr${t?' class="tot"':''}>${c.map((x,i)=>`<td${left.includes(i)?'':' class="n"'}>${x}</td>`).join('')}</tr>`;
+const yrTbl=(first,rows)=>tbl([first,...Y,'All years'],[...rows.map(([n,a])=>tr([n,...a.map(dash),fmt(sum(a))])),tr(['Total',...Y.map((_,i)=>fmt(sum(rows.map(r=>r[1][i])))),fmt(sum(rows.map(r=>sum(r[1]))))],1)]);
+const ACT='<td class="act" contenteditable="false"><button class="rowdel" title="Delete row" aria-label="Delete row">×</button></td>';
+const actTbl=(h,rows,left,cls,kind)=>{
+ const hh=h.map((x,i)=>`<th${left.includes(i)?'':' class="n"'}>${x}</th>`).join('')+'<th class="act"></th>';
+ const rr=rows.map(r=>r.replace(/<\/tr>$/,r.startsWith('<tr class="tot"')?'<td class="act"></td></tr>':ACT+'</tr>')).join('');
+ return `<div class="tw ${cls}" data-calc="${kind}"><table><thead><tr>${hh}</tr></thead><tbody>${rr}</tbody></table></div><p class="act addrow" contenteditable="false"><button class="btn addr">Add row</button></p>`;
+};
+const lvlTbl=(first,rows)=>tbl([first,'Male','Female','Total','Female %','Share of 2018 entrants'],[...rows.map(([n,m,f])=>tr([n,fmt(m),fmt(f),fmt(m+f),fp(m,f),pc((m+f)/T[4])])),tr(['Total',fmt(M[4]),fmt(F[4]),fmt(T[4]),fp(M[4],F[4]),'100.0%'],1)]);
+
+function stackChart(){
+ const W=560,H=250,pl=44,pb=28,pt=18,mx=Math.max(500,Math.ceil(Math.max(...T)/500)*500),ph=H-pt-pb,step=(W-pl-10)/5,bw=62;
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="New entrants per year, split by male and female">`;
+ for(let t=0;t<=mx;t+=mx/5){const y=pt+ph*(1-t/mx);s+=`<line x1="${pl}" x2="${W}" y1="${y}" y2="${y}" class="gl"/><text x="${pl-6}" y="${y+4}" class="ax" text-anchor="end">${fmt(t)}</text>`}
+ Y.forEach((yr,i)=>{const x=pl+step*i+(step-bw)/2,hm=ph*M[i]/mx,hf=ph*F[i]/mx,yb=pt+ph;
+  s+=`<rect x="${x}" y="${yb-hm}" width="${bw}" height="${hm}" fill="#2F7F9E"/><rect x="${x}" y="${yb-hm-hf}" width="${bw}" height="${hf}" fill="#B8456B"/>`;
+  s+=`<text x="${x+bw/2}" y="${yb-hm-hf-5}" class="lb" text-anchor="middle">${fmt(T[i])}</text><text x="${x+bw/2}" y="${H-9}" class="ax" text-anchor="middle">${yr}</text>`});
+ return s+'</svg><div class="lg"><span><i style="background:#2F7F9E"></i>Male</span><span><i style="background:#B8456B"></i>Female</span></div>';
+}
+function genderChart(){
+ const W=560,rh=38,lx=180,H=G18.length*rh+8,mw=W-lx-60;
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Female share of 2018 entrants by program level">`;
+ G18.forEach(([n,m,f],i)=>{const p=m+f?f/(m+f):0,y=i*rh+4;
+  s+=`<text x="0" y="${y+20}" class="lb">${n}</text><rect x="${lx}" y="${y+6}" width="${mw}" height="18" fill="#EAF0ED"/><rect x="${lx}" y="${y+6}" width="${mw*p}" height="18" fill="#B8456B"/><text x="${lx+mw*p+8}" y="${y+20}" class="ax" style="font-weight:600">${pc(p)}</text>`});
+ return s+'</svg>';
+}
+
+function build(){
+ derive();
+ const lfl=LF[4]/LF[3]-1,all=T[4]/T[3]-1,exF=sum(G18.filter(g=>g[0]!=='Diploma and Certificate').map(g=>g[2])),exT=sum(G18.filter(g=>g[0]!=='Diploma and Certificate').map(g=>g[1]+g[2]));
+ const head=`<header class="rh"><p class="org">Oromia State University</p><h1>Student Entry Analysis, 2014–2018</h1><p>New entrants by year of entry. Prepared by: [add your name and office]. Date: [add date].</p></header>`;
+ const S=(id,t,body)=>SEC[id]=`<section data-sec="${id}" data-t="${t}">${body}</section>`;
+ const K=(b,s)=>`<div><b>${b}</b><span>${s}</span></div>`;
+ const cpChk=sum(CP.map(c=>sum(c.a)))===sum(MO[4][1]);
+ return head+
+ S('kpi','Key figures',`<div class="kpis">${K(fmt(sum(T)),'Total new entrants, 2014–2018')+K(fmt(T[4]),'Entrants in 2018')+K(sg(all),'2018 vs 2017, all programs')+K(sg(lfl),'2018 vs 2017, like-for-like (excluding Diploma, Certificate and Education)')+K(pc(F[4]/T[4]),'Female share, 2018')+K(pc(F[0]/T[0]),'Female share, 2014')+K(pc(exF/exT),'Female share, 2018, excluding Diploma and Certificate')}</div>`)+
+ S('sum','Summary',`<h2>Summary</h2><p>Oromia State University enrolled ${fmt(sum(T))} new entrants between 2014 and 2018. Intake rose from ${T[0]} in 2014 to ${fmt(T[4])} in 2018, but most of the 2018 jump comes from two categories that do not appear in earlier years: Diploma and Certificate programmes (${fmt(sum(LV[2][1]))} entrants, all Summer) and Education degrees (${fmt(sum(LV[1][1]))}).</p><p>Without them, 2018 intake was ${LF[4]} against ${LF[3]} in 2017, an increase of ${pc(lfl)}.</p>`)+
+ S('year','Entrants by year',`<h2>Entrants by year</h2><figure>${stackChart()}<figcaption>New entrants by year of entry, male and female.</figcaption></figure>`+tbl(['Entry year','Male','Female','Total','Female %','Change vs prior year'],[...Y.map((y,i)=>tr([y,fmt(M[i]),fmt(F[i]),fmt(T[i]),fp(M[i],F[i]),i?sg(T[i]/T[i-1]-1):'–'])),tr(['All years',fmt(sum(M)),fmt(sum(F)),fmt(sum(T)),fp(sum(M),sum(F)),''],1)])+
+  `<p>Diploma and Certificate and Education degrees only appear in 2018. This table removes them so years can be compared fairly.</p>`+tbl(['Entry year','Total (all programs)','Diploma and Certificate + Education degrees','Total (like-for-like)','Change vs prior year'],Y.map((y,i)=>tr([y,fmt(T[i]),fmt(exTot[i]),fmt(LF[i]),i?sg(LF[i]/LF[i-1]-1):'–'])))) +
+ S('lvl','Program level and study mode',`<h2>Program level and study mode</h2>`+yrTbl('Program level',LV)+yrTbl('Study mode',MO))+
+ S('gen','Gender',`<h2>Gender</h2><p>Female % = Female ÷ (Male + Female).</p><figure>${genderChart()}<figcaption>Female share of 2018 entrants by program level.</figcaption></figure><p>2018 entrants by program level</p>`+lvlTbl('Program level',G18)+`<p>2018 entrants by study mode</p>`+lvlTbl('Study mode',G18M)+`<p>Female % trend by program level (blank means no entrants that year)</p>`+tbl(['Program level',...Y],[...LVN.map(l=>tr([l,...Y.map((y,i)=>{const rr=R.filter(r=>r.p===l&&r.y===y);return fp(sum(rr.map(r=>r.M)),sum(rr.map(r=>r.F)))})])),tr(['All programs',...Y.map((_,i)=>fp(M[i],F[i]))],1)]))+
+ S('dep','Department list',`<h2>Department list</h2><p>All ${DEPT.length} departments and programmes, calculated from the Data list. A dash means no entrants were reported for that year. In edit mode you can change a figure, delete a row or add a row. The matching Data list records change, and every other table updates to the same numbers.</p>`+actTbl(['Department','Program level',...Y,'All years','2018 female %'],[...DEPT.map((x,i)=>tr([x[0],x[1],...x.slice(2,7).map(dash),fmt(x[7]),x[8]==null?'–':pc(x[8])],0,[0,1]).replace('<tr>','<tr data-o="'+i+'">')),tr(['Total','',...dTot(DEPT)],1,[0,1])],[0,1],'','dep'))+
+ S('cam','Weekend campuses',`<h2>Weekend campuses</h2><p>Weekend intake only. A dash means no weekend entrants were reported for that campus in that year.</p>`+tbl(['Campus',...Y,'All years','Female % (all years)'],[...CP.map(x=>tr([x.c,...x.a.map(v=>v?`<span style="display:block;margin:-6px -10px;padding:6px 10px;background:rgba(31,122,92,${(v/109*.7+.08).toFixed(2)})">${v}</span>`:'–'),fmt(sum(x.a)),fp(x.m,x.f)])),tr(['Total',...Y.map((_,i)=>fmt(sum(CP.map(c=>c.a[i])))),fmt(sum(CP.map(c=>sum(c.a)))),fp(sum(CP.map(c=>c.m)),sum(CP.map(c=>c.f)))],1)])+`<p>Check: campus total ${cpChk?'equals':'does not equal'} the Weekend row in the study mode table.</p>`)+
+ S('find','Main findings',`<h2>Main findings</h2><ol>
+ <li>Female share rose from 21.9% in 2014 to 54.5% in 2018, driven by Diploma and Certificate programmes (78.0% female). Without them, the 2018 female share is 18.8%. Education degrees are 12.5% female, Masters 20.2% and PhD 4.5% (1 of 22).</li>
+ <li>Regular (day) intake has grown every year: 7, 48, 125, 240 and 577 entrants from 2014 to 2018. Winter intake fell from 190 to 97. Weekend intake peaked at 296 in 2016, dropped to 123 in 2017 and recovered to 236 in 2018.</li>
+ <li>Masters entrants rose from 100 (2017) to 257 (2018), led by MBA (118) and Project Management (116). PhD intake rose from 16 to 22.</li>
+ <li>Some long-running programmes are shrinking. Management peaked at 260 in 2016 and was 38 in 2018. Natural Resource Management fell from 136 (2014) to 34, and Law from 107 to 12.</li>
+ <li>Batu is the largest weekend campus and is growing (39, 58 and 95 in 2016–2018). Sebeta was the largest in 2015–2016 (86 and 109) but had only 17 in 2018.</li></ol>`)+
+ S('app','Data list',`<h2>Data list: all ${REC.length} records</h2><p>Every row of the Data sheet. Blank source cells are shown as a dash and counted as zero. In edit mode you can change a figure, delete a row or add a row. The Department list and every other table update to the same numbers.</p>`+actTbl(['Year','Program','Department','Mode','Campus','Male','Female','Total','Female %','Source cell'],[...REC.map(r=>tr([r[0],r[1],r[2],r[3],r[4]||'',r[5]??'–',r[6]??'–',r[7]??'–',r[7]?pc((r[6]||0)/r[7]):'–',r[8]||''],0,[0,1,2,3,4,9])),tr(['Total','','','','',fmt(sum(M)),fmt(sum(F)),fmt(sum(T)),fp(sum(M),sum(F)),''],1,[0,1,2,3,4,9])],[0,1,2,3,4,9],'sm','rec'))+
+ S('note','Notes',`<h2>Notes on the data</h2><ul><li>Source: Z_Ragaa_barattoota_YNO_Hagayya_2018.xlsx. Blank source cells are counted as zero. All figures in this report are calculated from the ${REC.length} records of the Data sheet.</li><li>Oromo Folklore and Afan Oromo (2018, Regular) is marked “Hin Jiru” in the source, so no figures are shown.</li><li>Some figures in the workbook’s own narrative (for example 2,216 entrants in 2018 and 540 in 2017) differ from its tables (2,460 and 538). This report uses the tables.</li></ul>`)+
+ `<footer class="rf">Oromia State University. Student Entry Analysis, 2014–2018.</footer>`;
+}
+
+/* ---------- storage ---------- */
+const KEY='osu-report-studio-v1';let store={reports:[],cur:null},dirty=false,editing=false;
+try{const s=localStorage.getItem(KEY);if(s)store=JSON.parse(s)}catch(e){}
+const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify(store));return true}catch(e){return false}};
+const $=id=>document.getElementById(id),paper=$('paper');
+const cur=()=>store.reports.find(r=>r.id===store.cur);
+const uid=()=>'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+const when=t=>new Date(t).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+
+function setState(msg,d){dirty=!!d;const s=$('state');s.textContent=msg;s.className=d?'dirty':''}
+function mk(name,html){const r={id:uid(),name,html:html||build(),updated:Date.now(),dh:dsig()};store.reports.unshift(r);store.cur=r.id;return r}
+function show(){
+ const r=cur();paper.innerHTML=r.html;$('name').value=r.name;
+ const stale=r.dh!==dsig();if(stale)refreshReport();
+ renderList();renderSecs();
+ setState(stale?'Numbers updated to match the Data list. Save changes to keep them.':(r.updated?'Saved '+when(r.updated):''),stale);
+}
+function renderList(){
+ const ul=$('list');ul.innerHTML='';
+ store.reports.forEach(r=>{
+  const li=document.createElement('li');if(r.id===store.cur)li.className='cur';
+  const b=document.createElement('button');b.className='open';b.innerHTML='<span></span><small></small>';
+  b.firstChild.textContent=r.name;b.lastChild.textContent='Saved '+when(r.updated);
+  b.onclick=()=>{if(r.id===store.cur)return;if(dirty&&!confirm('You have unsaved changes. Leave without saving?'))return;store.cur=r.id;persist();show()};
+  const d=document.createElement('button');d.className='del';d.textContent='×';d.title='Delete report';d.setAttribute('aria-label','Delete '+r.name);
+  d.onclick=()=>{if(!confirm('Delete “'+r.name+'”? This cannot be undone.'))return;
+   store.reports=store.reports.filter(x=>x.id!==r.id);if(!store.reports.length)mk('Student Entry Analysis, 2014–2018');else if(store.cur===r.id)store.cur=store.reports[0].id;persist();show()};
+  li.append(b,d);ul.append(li);
+ });
+}
+function renderSecs(){
+ const box=$('secs');box.innerHTML='';
+ paper.querySelectorAll('[data-sec]').forEach(s=>{
+  const l=document.createElement('label'),c=document.createElement('input');c.type='checkbox';c.checked=!s.classList.contains('off');
+  c.onchange=()=>{s.classList.toggle('off',!c.checked);setState('Unsaved changes',true)};
+  l.append(c,document.createTextNode(s.dataset.t));box.append(l);
+ });
+}
+function save(asCopy){
+ flush();let r=cur();const name=$('name').value.trim()||'Untitled report';
+ if(asCopy){r=mk(name+' (copy)')}
+ r.name=asCopy?name+' (copy)':name;r.html=paper.innerHTML;r.updated=Date.now();r.dh=dsig();
+ const ok=persist();renderList();$('name').value=r.name;
+ setState(ok?'Saved '+when(r.updated):'Could not save in this browser. Use Print to keep a PDF.',!ok);
+}
+function setEdit(on){if(!on&&editing)flush();editing=on;paper.contentEditable=on;paper.classList.toggle('editing',on);$('edit').textContent=on?'Done editing':'Edit report';$('edit').setAttribute('aria-pressed',on);$('edit').className='btn'+(on?' pri':'')}
+
+$('edit').onclick=()=>setEdit(!editing);
+$('save').onclick=()=>save(false);
+$('copy').onclick=()=>save(true);
+$('print').onclick=()=>{setEdit(false);window.print()};
+$('new').onclick=()=>{if(dirty&&!confirm('You have unsaved changes. Leave without saving?'))return;mk('Untitled report');persist();show();setEdit(true);$('name').select()};
+$('reset').onclick=()=>{if(!confirm('Replace this report’s content with a fresh version built from your current Department list and Data list? Your edits to this report will be lost.'))return;paper.innerHTML=build();renderSecs();setState('Unsaved changes',true)};
+paper.addEventListener('input',()=>setState('Unsaved changes',true));
+$('name').addEventListener('input',()=>setState('Unsaved changes',true));
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();save(false)}});
+window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}});
+let oldTitle=document.title;
+window.addEventListener('beforeprint',()=>{oldTitle=document.title;document.title=$('name').value||'Report'});
+window.addEventListener('afterprint',()=>{document.title=oldTitle});
+
+/* ---------- editable Department list and Data list ---------- */
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+const fillSel=(id,vals,all)=>{const s=$(id),v=s.value;s.innerHTML=`<option value="">${all}</option>`+vals.map(x=>`<option>${esc(x)}</option>`).join('');if(vals.map(String).includes(v))s.value=v};
+const BT=i=>`<td class="ac"><button class="lnk" data-a="edit" data-i="${i}">Edit</button><button class="lnk dl" data-a="del" data-i="${i}">Delete</button></td>`;
+const withAct=(row,i)=>row.replace(/<\/tr>$/,(i==null?'<td class="ac"></td>':BT(i))+'</tr>');
+const sortTh=(cols,left,s)=>cols.map((c,i)=>`<th${left.includes(i)?'':' class="n"'} aria-sort="${s&&s.k===i?(s.d>0?'ascending':'descending'):'none'}"><button class="sb" data-k="${i}">${c}${s&&s.k===i?(s.d>0?' ▲':' ▼'):''}</button></th>`).join('')+'<th class="ac">Actions</th>';
+const cmp=s=>(a,b)=>{const x=a[s.k],y=b[s.k];return s.d*((typeof x==='string')?x.localeCompare(y):(x??-1)-(y??-1))};
+const NOTE='Edit, delete or add rows. The Department list, the Data list and the open report all update to the same numbers, and changes are saved in this browser.';
+const hs=s=>{let x=0;for(let i=0;i<s.length;i++)x=(x*31+s.charCodeAt(i))|0;return x};
+const dsig=()=>hs(JSON.stringify(REC));
+const LIVE=['kpi','sum','year','lvl','gen','dep','cam','app'];
+function refreshReport(){
+ derive();build();
+ LIVE.forEach(id=>{
+  const el=paper.querySelector('[data-sec="'+id+'"]');if(!el||!SEC[id])return;
+  if(id==='sum'&&el.dataset.e)return;
+  const t=document.createElement('div');t.innerHTML=SEC[id];const n=t.firstElementChild;
+  if(el.classList.contains('off'))n.classList.add('off');
+  const oh=el.querySelector('h2'),nh=n.querySelector('h2');if(oh&&nh&&id!=='app')nh.innerHTML=oh.innerHTML;
+  el.replaceWith(n);
+ });
+}
+function applied(){saveLists();refreshReport();setState('Numbers updated everywhere. Save changes to keep them in this report.',true)}
+function listsChanged(){const ok=saveLists();refreshReport();setState('Numbers updated in the open report. Save changes to keep them.',true);['dn1','dn2'].forEach(id=>$(id).textContent=(ok?'Saved. ':'Could not save in this browser, so changes are lost when you close this page. ')+NOTE)}
+
+/* dialog */
+let dsave=null;
+function openDlg(title,fields,vals,onSave,hint){
+ $('dt').textContent=title;$('de').textContent='';$('dh').textContent=hint||'';
+ $('df').innerHTML=fields.map((f,i)=>`<label class="${f.w?'w':''}">${f.l}<input type="${f.t||'text'}" ${f.t==='number'?'step="any"':''} value="${esc(vals[i]??'')}"></label>`).join('');
+ dsave=()=>{const v=[...$('df').querySelectorAll('input')].map(x=>x.value.trim());const err=onSave(v);if(err){$('de').textContent=err;return}$('dlg').close()};
+ $('dlg').showModal();$('df').querySelector('input').focus();
+}
+$('dsave').onclick=()=>dsave&&dsave();$('dcancel').onclick=()=>$('dlg').close();
+$('df').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();dsave&&dsave()}});
+
+/* department list */
+let ds={k:7,d:-1};
+const COLS=['Department','Program level',...Y,'All years','2018 female %'];
+const DF=[{l:'Department',w:1},{l:'Program level',w:1},...Y.map(y=>({l:String(y),t:'number'}))];
+function renderDept(){
+ derive();fillSel('dl',[...new Set(DEPT.map(r=>r[1]))],'All program levels');
+ const q=$('dq').value.trim().toLowerCase(),lv=$('dl').value;
+ const rows=DEPT.map((r,i)=>[...r,i]).filter(r=>(!lv||r[1]===lv)&&r[0].toLowerCase().includes(q)).sort(cmp(ds));
+ const body=rows.length?rows.map(r=>withAct(tr([r[0],r[1],...r.slice(2,7).map(dash),fmt(r[7]),r[8]==null?'–':pc(r[8])],0,[0,1]),r[9])).join('')+withAct(tr(['Total'+(rows.length<DEPT.length?' (filtered)':''),'',...dTot(rows)],1,[0,1])):'<tr><td class="empty" colspan="10">No department matches your search. Clear the search or choose All program levels.</td></tr>';
+ $('dtable').innerHTML=`<div class="tw"><table><thead><tr>${sortTh(COLS,[0,1],ds)}</tr></thead><tbody>${body}</tbody></table></div>`;
+ $('dc').textContent=rows.length+' of '+DEPT.length+' departments';
+}
+const DHINT='Entrants come from the Data list. Changing a year’s number changes that department’s Data list records and keeps their male and female proportions. For an exact split, edit the records in the Data list.';
+function editDept(i){
+ const r=i==null?null:DEPT[i],old=r?{d:r[0],p:r[1]}:null;
+ openDlg(r?'Edit department':'Add department',DF,r?[r[0],r[1],...r.slice(2,7)]:['','','','','','',''],v=>{
+  if(!v[0]||!v[1])return 'Enter the department name and program level.';
+  const ys=v.slice(2,7).map(x=>x===''?0:Number(x));if(ys.some(x=>!Number.isInteger(x)||x<0))return 'Entrants must be whole numbers, zero or more.';
+  if(!r&&!sum(ys))return 'Enter the number of entrants for at least one year.';
+  applyDept(old,v[0],v[1],ys);listsChanged();renderDept();
+ },DHINT);
+}
+$('dtable').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+ if(b.classList.contains('sb')){const k=+b.dataset.k;ds=ds.k===k?{k,d:-ds.d}:{k,d:k<2?1:-1};renderDept()}
+ else if(b.dataset.a==='edit')editDept(+b.dataset.i);
+ else if(b.dataset.a==='del'){const r=DEPT[+b.dataset.i],n=REC.filter(x=>x[2]===r[0]&&x[1]===r[1]).length;if(confirm('Delete “'+r[0]+'” and its '+n+' records from the Data list? All numbers will update.')){REC=REC.filter(x=>!(x[2]===r[0]&&x[1]===r[1]));listsChanged();renderDept()}}
+});
+
+/* data list */
+let xs=null;
+const XC=['Year','Program','Department','Mode','Campus (Weekend only)','Male','Female','Total','Female %','Source cell in original file'],XL=[0,1,2,3,4,9];
+const XF=[{l:'Year',t:'number'},{l:'Study mode'},{l:'Program',w:1},{l:'Department',w:1},{l:'Campus (Weekend only)'},{l:'Source cell'},{l:'Male',t:'number'},{l:'Female',t:'number'}];
+const nv=v=>v==null?'–':fmt(v);
+function renderData(){
+ const XR=REC.map((r,i)=>[r[0],r[1],r[2],r[3],r[4]||'',r[5],r[6],r[7],r[7]?(r[6]||0)/r[7]:null,r[8]||'',i]);
+ fillSel('xy',[...new Set(XR.map(r=>r[0]))].sort(),'All years');fillSel('xp',[...new Set(XR.map(r=>r[1]))],'All programs');fillSel('xm',[...new Set(XR.map(r=>r[3]))],'All study modes');
+ const q=$('xq').value.trim().toLowerCase(),y=$('xy').value,p=$('xp').value,m=$('xm').value;
+ const rows=XR.filter(r=>(!y||String(r[0])===y)&&(!p||r[1]===p)&&(!m||r[3]===m)&&(r[2]+' '+r[1]+' '+r[4]).toLowerCase().includes(q));
+ if(xs)rows.sort(cmp(xs));
+ const sM=sum(rows.map(r=>r[5]||0)),sF=sum(rows.map(r=>r[6]||0));
+ const body=rows.length?rows.map(r=>withAct(tr([r[0],r[1],r[2],r[3],r[4],nv(r[5]),nv(r[6]),nv(r[7]),r[8]==null?'–':pc(r[8]),r[9]],0,XL),r[10])).join('')+withAct(tr(['Total'+(rows.length<XR.length?' (filtered)':''),'','','','',fmt(sM),fmt(sF),fmt(sM+sF),fp(sM,sF),''],1,XL)):'<tr><td class="empty" colspan="11">No record matches your search or filters. Clear them to see all records.</td></tr>';
+ $('xtable').innerHTML=`<div class="tw sm"><table><thead><tr>${sortTh(XC,XL,xs)}</tr></thead><tbody>${body}</tbody></table></div>`;
+ $('xc').textContent=rows.length+' of '+XR.length+' records';
+}
+function editRec(i){
+ const r=i==null?null:REC[i];
+ openDlg(r?'Edit record':'Add record',XF,r?[r[0],r[3],r[1],r[2],r[4]??'',r[8]??'',r[5]??'',r[6]??'']:['','','','','','','',''],v=>{
+  const yr=Number(v[0]);if(!Number.isInteger(yr)||yr<1900||yr>2100)return 'Enter a valid year, for example 2018.';
+  if(!v[1]||!v[2]||!v[3])return 'Enter the study mode, program and department.';
+  const m=v[6]===''?null:Number(v[6]),f=v[7]===''?null:Number(v[7]);
+  if([m,f].some(x=>x!=null&&(!Number.isInteger(x)||x<0)))return 'Male and female must be whole numbers, zero or more.';
+  const row=[yr,v[2],v[3],v[1],v[4]||null,m,f,m==null&&f==null?null:(m||0)+(f||0),v[5]||null];
+  if(r)REC[i]=row;else REC.push(row);listsChanged();renderData();
+ });
+}
+$('xtable').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+ if(b.classList.contains('sb')){const k=+b.dataset.k,a=XL.includes(k)?1:-1;xs=!xs||xs.k!==k?{k,d:a}:(xs.d===a?{k,d:-a}:null);renderData()}
+ else if(b.dataset.a==='edit')editRec(+b.dataset.i);
+ else if(b.dataset.a==='del'){const r=REC[+b.dataset.i];if(confirm('Delete this record ('+r[0]+', '+r[2]+', '+r[3]+(r[4]?', '+r[4]:'')+') from the Data list?')){REC.splice(+b.dataset.i,1);listsChanged();renderData()}}
+});
+const resetLists=()=>{if(!confirm('Restore the original Excel data? Your edits to the Data list and Department list will be lost, and the open report will update.'))return;REC=JSON.parse(JSON.stringify(REC0));listsChanged();renderDept();renderData()};
+$('dadd').onclick=()=>editDept(null);$('xadd').onclick=()=>editRec(null);$('dreset').onclick=resetLists;$('xreset').onclick=resetLists;
+['dq'].forEach(i=>$(i).addEventListener('input',renderDept));$('dl').addEventListener('change',renderDept);
+$('xq').addEventListener('input',renderData);['xy','xp','xm'].forEach(i=>$(i).addEventListener('change',renderData));
+
+/* views */
+function setView(v){
+ const d=v==='dept',x=v==='dat';document.body.classList.toggle('dept',d);document.body.classList.toggle('dat',x);
+ $('vrep').setAttribute('aria-pressed',v==='rep');$('vdep').setAttribute('aria-pressed',d);$('vdat').setAttribute('aria-pressed',x);
+ $('vt').textContent=x?'Data':'Department list';
+ if(d||x)setEdit(false);if(d)renderDept();if(x)renderData();
+}
+$('vrep').onclick=()=>setView('rep');$('vdep').onclick=()=>setView('dept');$('vdat').onclick=()=>setView('dat');
+
+/* edit, delete and add rows inside the report */
+const num=t=>{const v=parseFloat(String(t).replace(/[,%\s]/g,''));return isNaN(v)?0:v};
+const blank=t=>/^\s*[–-]?\s*$/.test(t);
+function recalc(w){
+ const all=[...w.querySelector('tbody').rows],tot=all.find(r=>r.classList.contains('tot')),rows=all.filter(r=>r!==tot);if(!tot)return;
+ const set=(c,v)=>{if(c&&c.textContent!==v)c.textContent=v},tx=(r,i)=>r.cells[i].textContent;
+ if(w.dataset.calc==='dep'){
+  rows.forEach(r=>set(r.cells[7],fmt(sum([2,3,4,5,6].map(i=>num(tx(r,i)))))));
+  [2,3,4,5,6,7].forEach(i=>set(tot.cells[i],fmt(sum(rows.map(r=>num(tx(r,i)))))));
+  const wr=rows.filter(r=>!blank(tx(r,8))),tw=sum(wr.map(r=>num(tx(r,6))));
+  set(tot.cells[8],tw?pc(sum(wr.map(r=>num(tx(r,8))/100*num(tx(r,6))))/tw):'–');
+ }else{
+  rows.forEach(r=>{const m=num(tx(r,5)),f=num(tx(r,6));set(r.cells[7],blank(tx(r,5))&&blank(tx(r,6))?'–':fmt(m+f));set(r.cells[8],m+f?pc(f/(m+f)):'–')});
+  const sm=sum(rows.map(r=>num(tx(r,5)))),sf=sum(rows.map(r=>num(tx(r,6))));
+  set(tot.cells[5],fmt(sm));set(tot.cells[6],fmt(sf));set(tot.cells[7],fmt(sm+sf));set(tot.cells[8],fp(sm,sf));
+ }
+}
+const selEl=()=>{const n=getSelection().anchorNode;return n&&(n.nodeType===1?n:n.parentElement)};
+paper.addEventListener('input',()=>{const el=selEl();if(!el||!paper.contains(el))return;const s=el.closest('[data-sec]');if(s)s.dataset.e='1';const w=el.closest('[data-calc]');if(w)recalc(w)});
+function commitRec(w){
+ const out=[];
+ for(const r of [...w.querySelector('tbody').rows].filter(r=>!r.classList.contains('tot'))){
+  const t=i=>r.cells[i].textContent.trim(),yr=Number(t(0)),m=blank(t(5))?null:Number(t(5).replace(/,/g,'')),f=blank(t(6))?null:Number(t(6).replace(/,/g,''));
+  if(!Number.isInteger(yr)||yr<1900||!t(1)||!t(2)||!t(3)||[m,f].some(x=>x!=null&&(!Number.isInteger(x)||x<0))){setState('Not applied yet: each Data list row needs a year, program, department, mode and whole-number entrants.',true);return}
+  out.push([yr,t(1),t(2),t(3),t(4)||null,m,f,m==null&&f==null?null:(m||0)+(f||0),t(9)||null]);
+ }
+ if(JSON.stringify(out)===JSON.stringify(REC))return;
+ REC=out;applied();
+}
+function commitDep(w){
+ let ch=false;
+ [...w.querySelector('tbody').rows].filter(r=>!r.classList.contains('tot')).forEach(r=>{
+  const t=i=>r.cells[i].textContent.trim(),name=t(0),lvl=t(1),yrs=[2,3,4,5,6].map(i=>blank(t(i))?0:num(t(i)));
+  if(!name||!lvl||yrs.some(x=>!Number.isInteger(x)||x<0))return;
+  const o=r.dataset.o,old=o===undefined||o===''?null:DEPT[+o];
+  if(!old){if(sum(yrs)>0){applyDept(null,name,lvl,yrs);ch=true}return}
+  if(old[0]!==name||old[1]!==lvl||yrs.some((v,i)=>v!==old[2+i])){applyDept({d:old[0],p:old[1]},name,lvl,yrs);ch=true}
+ });
+ if(ch)applied();
+}
+const commit=w=>{if(!editing||!w.isConnected)return;w.dataset.calc==='rec'?commitRec(w):commitDep(w)};
+let lastW=null;
+function flush(){lastW=null;paper.querySelectorAll('[data-calc]').forEach(commit)}
+document.addEventListener('selectionchange',()=>{
+ if(!editing)return;const el=selEl(),w=el&&paper.contains(el)?el.closest('[data-calc]'):null;
+ if(lastW&&lastW!==w){const p=lastW;lastW=w;commit(p);return}
+ lastW=w;
+});
+paper.addEventListener('click',e=>{
+ const d=e.target.closest('.rowdel');
+ if(d){
+  if(!editing)return;const w=d.closest('[data-calc]'),row=d.closest('tr');
+  if(w.dataset.calc==='dep'){
+   const o=row.dataset.o;
+   if(o===undefined||o===''){row.remove();recalc(w);return}
+   const r=DEPT[+o],n=REC.filter(x=>x[2]===r[0]&&x[1]===r[1]).length;
+   if(!confirm('Delete “'+r[0]+'” and its '+n+' records from the Data list? All numbers will update.'))return;
+   REC=REC.filter(x=>!(x[2]===r[0]&&x[1]===r[1]));applied();return;
+  }
+  if(!confirm('Delete this record? All numbers will update.'))return;row.remove();commitRec(w);return;
+ }
+ const a=e.target.closest('.addr');
+ if(a&&editing){const w=a.closest('section').querySelector('[data-calc]'),tb=w.querySelector('tbody'),tot=tb.querySelector('.tot'),first=[...tb.rows].find(r=>r!==tot);
+  const n=first.cloneNode(true);delete n.dataset.o;[...n.cells].forEach(c=>{if(!c.classList.contains('act'))c.textContent=''});tb.insertBefore(n,tot);recalc(w);
+  const rg=document.createRange();rg.selectNodeContents(n.cells[0]);rg.collapse(true);const s=getSelection();s.removeAllRanges();s.addRange(rg);n.scrollIntoView({block:'center'});
+  setState(w.dataset.calc==='dep'?'Fill in the department, program level and entrants. Numbers update when you click away.':'Fill in the year, program, department, mode and entrants. Numbers update when you click away.',true)}
+});
+
+if(!store.reports.length||!cur()){store.reports=[];mk('Student Entry Analysis, 2014–2018');persist()}
+show();
+</script>
+</body>
+</html>

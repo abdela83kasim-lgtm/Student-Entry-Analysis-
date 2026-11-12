@@ -1,0 +1,78 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user with role information and password",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "roleTitle": { "type": "string" },
+        "programLevelScope": { "type": "string" },
+        "assignedDepartment": { "type": "string" },
+        "departmentOfferStatus": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "password": { "type": "string" }
+      },
+      "required": ["username", "name", "role"]
+    },
+    "Record": {
+      "title": "Record",
+      "description": "Raw student enrollment record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "year": { "type": "number" },
+        "program": { "type": "string" },
+        "department": { "type": "string" },
+        "mode": { "type": "string" },
+        "campus": { "type": "string" },
+        "male": { "type": "number" },
+        "female": { "type": "number" },
+        "total": { "type": "number" }
+      },
+      "required": ["id", "year", "program", "department"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "OSU report document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "institution": { "type": "string" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "name"]
+    },
+    "LoginLog": {
+      "title": "LoginLog",
+      "description": "Record of user login activity",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["username", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and RBAC roles"
+    },
+    "/records/{recordId}": {
+      "schema": "Record",
+      "description": "Student enrollment records"
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "OSU report documents"
+    },
+    "/loginLogs/{logId}": {
+      "schema": "LoginLog",
+      "description": "Audit trail for logins"
+    }
+  }
+}

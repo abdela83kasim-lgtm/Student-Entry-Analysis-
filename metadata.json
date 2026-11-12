@@ -1,0 +1,8 @@
+{
+  "name": "Remix  OSU Active Student Report ",
+  "description": "A professional institutional portal for preparing, editing, calculating, and printing academic reports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

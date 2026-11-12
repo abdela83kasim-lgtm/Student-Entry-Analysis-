@@ -1,0 +1,86 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-serif: "Source Serif 4", Georgia, Cambria, serif;
+    --font-sans: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  body {
+    font-family: var(--font-sans);
+  }
+
+  h1, h2, h3, .font-editorial {
+    font-family: var(--font-serif);
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Print specific styles */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 10mm 14mm 10mm;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #17262b !important;
+  }
+
+  .no-print,
+  .print-hidden,
+  aside,
+  header.app-header,
+  .action-bar,
+  .toolbar-floating,
+  .interactive-action,
+  button:not(.print-allow),
+  .modal-backdrop,
+  dialog {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .report-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    outline: none !important;
+  }
+
+  .page-break-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .page-break-before {
+    break-before: page !important;
+    page-break-before: always !important;
+  }
+
+  tr {
+    break-inside: avoid !important;
+  }
+
+  h2, h3 {
+    break-after: avoid !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
