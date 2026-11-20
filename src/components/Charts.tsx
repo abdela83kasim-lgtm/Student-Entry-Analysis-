@@ -18,8 +18,10 @@ export const YearlyStackedChart: React.FC<StackedChartProps> = ({ analytics }) =
   const plotWidth = width - paddingLeft - paddingRight;
   const plotHeight = height - paddingTop - paddingBottom;
 
-  const barWidth = 64;
-  const step = plotWidth / years.length;
+  const step = plotWidth / Math.max(1, years.length);
+  const barWidth = Math.min(64, Math.max(20, Math.floor(step * 0.58)));
+  const firstYear = years[0] ?? 2014;
+  const latestYear = analytics.latestYear ?? years[years.length - 1] ?? 2018;
 
   const gridSteps = 5;
   const gridValues = Array.from({ length: gridSteps + 1 }, (_, i) => Math.round((maxVal / gridSteps) * i));
@@ -28,7 +30,9 @@ export const YearlyStackedChart: React.FC<StackedChartProps> = ({ analytics }) =
     <div className="w-full my-6 page-break-avoid">
       <div className="bg-[#FAFDFB] border border-[#D5E2DC] rounded-xl p-5 shadow-xs">
         <div className="flex items-center justify-between mb-3 text-xs text-[#52665F]">
-          <span className="font-semibold text-[#0F4C3A]">Figure 1: Student Intake Trajectory by Gender (2014–2018)</span>
+          <span className="font-semibold text-[#0F4C3A]">
+            Figure 1: Student Intake Trajectory by Gender ({firstYear}–{latestYear})
+          </span>
           <div className="flex items-center gap-4 text-xs">
             <span className="flex items-center gap-1.5">
               <span className="inline-block w-3 h-3 rounded-xs bg-[#2F7F9E]" />
@@ -149,7 +153,7 @@ export const YearlyStackedChart: React.FC<StackedChartProps> = ({ analytics }) =
         </div>
 
         <p className="mt-2 text-xs text-[#6A8077] italic text-center">
-          Note: Significant acceleration in 2018 corresponds to the institutional inauguration of Summer Diploma/Certificate programs (1,484) and Education BED tracks (409).
+          Note: All academic years ({firstYear}–{latestYear}) dynamically reflect verified records across all programs and campuses.
         </p>
       </div>
     </div>
@@ -158,21 +162,42 @@ export const YearlyStackedChart: React.FC<StackedChartProps> = ({ analytics }) =
 
 interface GenderShareChartProps {
   analytics: AnalyticsResult;
+  selectedYear?: number | 'ALL';
 }
 
-export const GenderShareChart: React.FC<GenderShareChartProps> = ({ analytics }) => {
-  const { genderByLevel2018 } = analytics;
+export const GenderShareChart: React.FC<GenderShareChartProps> = ({ analytics, selectedYear = 'ALL' }) => {
+  const { years, latestYear, genderByLevelAllYears, genderByLevelByYear } = analytics;
+  const firstYear = years[0] ?? 2014;
+
+  const yearEntry =
+    selectedYear !== 'ALL'
+      ? genderByLevelByYear.find((entry) => entry.year === selectedYear)
+      : null;
+
+  const items = yearEntry ? yearEntry.levels : genderByLevelAllYears;
+  const periodLabel = yearEntry ? String(yearEntry.year) : `All Years (${firstYear}–${latestYear})`;
+
+  const nonZeroItems = items.filter((item) => item.total > 0);
+  const highestItem = nonZeroItems.length > 0
+    ? [...nonZeroItems].sort((a, b) => b.femalePct - a.femalePct)[0]
+    : null;
+  const lowestItem = nonZeroItems.length > 0
+    ? [...nonZeroItems].sort((a, b) => a.femalePct - b.femalePct)[0]
+    : null;
+
   const rowHeight = 40;
   const labelWidth = 190;
   const totalWidth = 640;
   const barAreaWidth = totalWidth - labelWidth - 80;
-  const height = genderByLevel2018.length * rowHeight + 20;
+  const height = items.length * rowHeight + 20;
 
   return (
     <div className="w-full my-6 page-break-avoid">
       <div className="bg-[#FAFDFB] border border-[#D5E2DC] rounded-xl p-5 shadow-xs">
         <div className="flex items-center justify-between mb-4 text-xs text-[#52665F]">
-          <span className="font-semibold text-[#0F4C3A]">Figure 2: 2018 Female Student Representation by Program Level</span>
+          <span className="font-semibold text-[#0F4C3A]">
+            Figure 2: {periodLabel} Female Student Representation by Program Level
+          </span>
           <span className="text-xs text-[#6A8077] font-medium">Target Parity: 50.0%</span>
         </div>
 
@@ -180,7 +205,7 @@ export const GenderShareChart: React.FC<GenderShareChartProps> = ({ analytics })
           viewBox={`0 0 ${totalWidth} ${height}`}
           className="w-full h-auto max-h-[280px] select-none"
           role="img"
-          aria-label="Female share of 2018 entrants by program level"
+          aria-label={`Female share of ${periodLabel} entrants by program level`}
         >
           {/* 50% benchmark reference line */}
           <line
@@ -193,7 +218,7 @@ export const GenderShareChart: React.FC<GenderShareChartProps> = ({ analytics })
             strokeDasharray="4 3"
           />
 
-          {genderByLevel2018.map((item, idx) => {
+          {items.map((item, idx) => {
             const y = idx * rowHeight + 10;
             const pct = item.femalePct / 100;
             const barWidth = Math.max(0, barAreaWidth * pct);
@@ -231,7 +256,7 @@ export const GenderShareChart: React.FC<GenderShareChartProps> = ({ analytics })
                   fill="#B8456B"
                   rx="3"
                 >
-                  <title>{`${item.level}: ${item.female} females of ${item.total} total (${formatPct(item.femalePct)})`}</title>
+                  <title>{`${item.level} (${periodLabel}): ${formatNum(item.female)} females of ${formatNum(item.total)} total (${formatPct(item.femalePct)})`}</title>
                 </rect>
 
                 {/* Percentage label */}
@@ -250,9 +275,15 @@ export const GenderShareChart: React.FC<GenderShareChartProps> = ({ analytics })
           })}
         </svg>
 
-        <div className="flex items-center justify-between mt-3 text-xs text-[#6A8077] pt-2 border-t border-[#E1ECE7]">
+        <div className="flex flex-wrap items-center justify-between gap-2 mt-3 text-xs text-[#6A8077] pt-2 border-t border-[#E1ECE7]">
           <span>Dashed line denotes 50% gender parity mark</span>
-          <span>Highest: Diploma & Certificate (78.0%) · Doctoral (4.5%)</span>
+          {highestItem && lowestItem ? (
+            <span>
+              Highest: {highestItem.level} ({formatPct(highestItem.femalePct)}) · Lowest: {lowestItem.level} ({formatPct(lowestItem.femalePct)})
+            </span>
+          ) : (
+            <span>No student records in selected period</span>
+          )}
         </div>
       </div>
     </div>

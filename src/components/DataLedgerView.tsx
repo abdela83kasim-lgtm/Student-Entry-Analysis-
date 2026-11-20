@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { RawRecord, UserAccount } from '../types';
+import { RawRecord, RecordApprovalStatus, UserAccount, formatAssignedDepartmentsLabel, getRecordApprovalStatus, parseAssignedDepartments, parseProgramLevelScopes } from '../types';
 import {
   formatNum,
   formatPct,
   PROGRAM_LEVELS,
   STUDY_MODES,
-  YEARS,
+  getAllYearsFromRecords,
   getDefaultSourceCell
 } from '../data/analytics';
 import {
@@ -24,9 +24,13 @@ import {
   Printer,
   Loader2,
   Lock,
-  ChevronDown
+  ChevronDown,
+  Users,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  ShieldCheck
 } from 'lucide-react';
-import { exportReportToPDF } from '../utils/exportPdf';
 
 interface DataLedgerViewProps {
   records: RawRecord[];
@@ -35,6 +39,9 @@ interface DataLedgerViewProps {
   onSaveNewRecord?: (record: RawRecord) => void;
   onEditRecord: (record: RawRecord, index: number) => void;
   onDeleteRecord: (record: RawRecord, index: number) => void;
+  onApproveRecord?: (record: RawRecord, index: number) => void;
+  onRejectRecord?: (record: RawRecord, index: number) => void;
+  onApproveAllPending?: () => void;
   onResetData: () => void;
   onMarkDataEntryComplete?: () => void;
 }
@@ -46,39 +53,50 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
   onSaveNewRecord,
   onEditRecord,
   onDeleteRecord,
+  onApproveRecord,
+  onRejectRecord,
+  onApproveAllPending,
   onResetData,
   onMarkDataEntryComplete
 }) => {
-  const isScoped = Boolean(
-    currentUserAccount &&
-    currentUserAccount.programLevelScope &&
-    currentUserAccount.programLevelScope !== 'ALL'
+  const scopedPrograms = useMemo(
+    () => parseProgramLevelScopes(currentUserAccount?.programLevelScope),
+    [currentUserAccount?.programLevelScope]
   );
-  const scopedProgramLevel = isScoped ? currentUserAccount!.programLevelScope : null;
+  const isSingleProgramScoped = scopedPrograms.length === 1;
+  const isMultiProgramScoped = scopedPrograms.length > 1;
+  const scopedProgramLevel = isSingleProgramScoped ? scopedPrograms[0] : null;
 
-  const isDeptScoped = Boolean(
-    currentUserAccount?.assignedDepartment &&
-    currentUserAccount.assignedDepartment !== 'ALL'
+  const assignedDepts = useMemo(
+    () => parseAssignedDepartments(currentUserAccount?.assignedDepartment),
+    [currentUserAccount?.assignedDepartment]
   );
-  const assignedDept = isDeptScoped ? currentUserAccount!.assignedDepartment! : null;
+  const isDeptScoped = assignedDepts.length > 0;
+  const isSingleAssignedDept = assignedDepts.length === 1;
+  const assignedDeptDisplay = assignedDepts.join(', ');
 
   const isAdmin = currentUserAccount?.role === 'admin';
   const canEditOrDelete = isAdmin;
+
+  const availableYears = useMemo(() => getAllYearsFromRecords(records), [records]);
+  const latestAvailableYear =
+    availableYears.length > 0 ? availableYears[availableYears.length - 1] : 2018;
 
   const [search, setSearch] = useState('');
   const [yearFilter, setYearFilter] = useState('');
   const [programFilter, setProgramFilter] = useState(scopedProgramLevel || '');
   const [modeFilter, setModeFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'' | RecordApprovalStatus>('');
   const [sortKey, setSortKey] = useState<number>(0);
   const [sortAsc, setSortAsc] = useState<boolean>(true);
 
   // Inline Quick Add State
-  const [quickYear, setQuickYear] = useState<number>(2018);
+  const [quickYear, setQuickYear] = useState<number>(latestAvailableYear);
   const [quickProgram, setQuickProgram] = useState<string>(
-    scopedProgramLevel || PROGRAM_LEVELS[0]
+    scopedPrograms[0] || PROGRAM_LEVELS[0]
   );
   const [quickDepartment, setQuickDepartment] = useState<string>(
-    assignedDept || ''
+    assignedDepts[0] || ''
   );
   const [quickMode, setQuickMode] = useState<string>(STUDY_MODES[0]);
   const [quickCampus, setQuickCampus] = useState<string>('');
@@ -157,18 +175,45 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
 
   const inlineDefaultSourceCell = getDefaultSourceCell(quickYear, quickMode, quickCampus);
 
+  useEffect(() => {
+    if (assignedDepts.length > 0) {
+      setQuickDepartment((prev) => (assignedDepts.includes(prev) ? prev : assignedDepts[0]));
+    }
+  }, [assignedDepts]);
+
+  useEffect(() => {
+    if (scopedPrograms.length > 0) {
+      setQuickProgram((prev) => (scopedPrograms.includes(prev) ? prev : scopedPrograms[0]));
+      if (scopedPrograms.length === 1) {
+        setProgramFilter(scopedPrograms[0]);
+      } else {
+        setProgramFilter((prev) => (prev && !scopedPrograms.includes(prev) ? '' : prev));
+      }
+    }
+  }, [scopedPrograms]);
+
   const handleQuickAdd = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setInlineError('');
 
-    const targetDept = assignedDept || quickDepartment.trim();
+    const targetDept = isSingleAssignedDept
+      ? assignedDepts[0]
+      : assignedDepts.length > 1
+      ? (assignedDepts.includes(quickDepartment) ? quickDepartment : assignedDepts[0])
+      : quickDepartment.trim();
     if (!targetDept) {
       setInlineError('Enter a Department name.');
       return;
     }
 
-    if (!quickYear || isNaN(quickYear) || quickYear < 1900 || quickYear > 2100) {
-      setInlineError('Enter a valid year (e.g. 2018).');
+    const targetProgram = isSingleProgramScoped
+      ? scopedPrograms[0]
+      : isMultiProgramScoped
+      ? (scopedPrograms.includes(quickProgram) ? quickProgram : scopedPrograms[0])
+      : quickProgram;
+
+    if (!quickYear || isNaN(quickYear) || quickYear < 1900 || quickYear > 2200) {
+      setInlineError('Enter a valid academic year (e.g. 2018, 2019, 2026).');
       return;
     }
 
@@ -189,7 +234,7 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
 
     const newRecord: RawRecord = [
       quickYear,
-      quickProgram,
+      targetProgram,
       targetDept,
       quickMode,
       quickCampus.trim() ? quickCampus.trim() : null,
@@ -204,7 +249,7 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
     }
 
     // Reset quick fields
-    if (!assignedDept) {
+    if (!isDeptScoped) {
       setQuickDepartment('');
     }
     setQuickCampus('');
@@ -213,6 +258,11 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
     setQuickSourceCell('');
     setInlineError('');
   };
+
+  const pendingCount = useMemo(
+    () => records.filter((r) => getRecordApprovalStatus(r) === 'pending').length,
+    [records]
+  );
 
   // Filter records
   const filtered = useMemo(() => {
@@ -229,8 +279,9 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
       const matchYear = !yearFilter || String(r[0]) === yearFilter;
       const matchProg = !programFilter || r[1] === programFilter;
       const matchMode = !modeFilter || r[3] === modeFilter;
+      const matchStatus = !statusFilter || getRecordApprovalStatus(r) === statusFilter;
 
-      return matchSearch && matchYear && matchProg && matchMode;
+      return matchSearch && matchYear && matchProg && matchMode && matchStatus;
     });
 
     filteredList.sort((a, b) => {
@@ -246,7 +297,7 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
     });
 
     return filteredList;
-  }, [records, search, yearFilter, programFilter, modeFilter, sortKey, sortAsc]);
+  }, [records, search, yearFilter, programFilter, modeFilter, statusFilter, sortKey, sortAsc]);
 
   const handleSort = (idx: number) => {
     if (sortKey === idx) {
@@ -305,10 +356,30 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
   const grandTotal = totalMale + totalFemale;
   const overallFemalePct = grandTotal > 0 ? (totalFemale / grandTotal) * 100 : 0;
 
+  // All Data Student Number View summary across approved records & dynamic years
+  const allDataSummary = useMemo(() => {
+    const approvedRecords = records.filter((r) => getRecordApprovalStatus(r) === 'approved');
+    const allM = approvedRecords.reduce((acc, r) => acc + (r[5] || 0), 0);
+    const allF = approvedRecords.reduce((acc, r) => acc + (r[6] || 0), 0);
+    const allTot = allM + allF;
+    const allFemalePct = allTot > 0 ? (allF / allTot) * 100 : 0;
+    const byYear = availableYears.map((yr) => {
+      const yrTotal = approvedRecords
+        .filter((r) => r[0] === yr)
+        .reduce((acc, r) => acc + (r[5] || 0) + (r[6] || 0), 0);
+      return { year: yr, total: yrTotal };
+    });
+    const pendingStudents = records
+      .filter((r) => getRecordApprovalStatus(r) === 'pending')
+      .reduce((acc, r) => acc + (r[5] || 0) + (r[6] || 0), 0);
+    return { allM, allF, allTot, allFemalePct, byYear, pendingStudents };
+  }, [records, availableYears]);
+
   const [isExporting, setIsExporting] = useState(false);
 
   const handleDownloadPDF = async () => {
     setIsExporting(true);
+    const { exportReportToPDF } = await import('../utils/exportPdf');
     await exportReportToPDF('data-ledger-document', 'OSU_Data_Ledger.pdf');
     setIsExporting(false);
   };
@@ -322,6 +393,7 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
     } catch (e) {
       console.warn('System print failed or blocked by iframe:', e);
     }
+    const { exportReportToPDF } = await import('../utils/exportPdf');
     await exportReportToPDF('data-ledger-document', 'OSU_Data_Ledger.pdf');
     setIsExporting(false);
   };
@@ -369,8 +441,8 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
       </div>
 
       <article id="data-ledger-document" className="paper bg-white dark:bg-[#16221F] text-[#17262B] dark:text-[#E7EFEC] rounded-xl shadow-lg border border-[#D5E0DC] dark:border-[#273B35] overflow-hidden">
-        {/* Header */}
-        <header className="bg-[#0F4C3A] text-white p-8 border-b-6 border-[#E0A526]">
+        {/* Unified Header: Title + All Data Student Number View */}
+        <header className="bg-[#0F4C3A] text-white p-6 sm:p-8 border-b-6 border-[#E0A526] space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <div className="text-xs uppercase tracking-widest text-[#A9D3C2] font-semibold mb-1 flex items-center gap-2">
@@ -382,7 +454,7 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
                 Student Admissions & Enrollment Ledger
               </h1>
               <p className="text-xs sm:text-sm text-[#CFE6DC] mt-1 font-mono">
-                Official 9-Column Format: Year · Program Level · Department · Mode · Campus · Male · Female · Total · Female %
+                All Data Student Number View · Year · Program Level · Department · Mode · Campus · Male · Female · Total · Female %
               </p>
             </div>
 
@@ -413,13 +485,76 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
                 <Plus className="w-4 h-4" />
                 <span>
                   {isDeptScoped
-                    ? `Add Student (${assignedDept})`
+                    ? `Add Student (${formatAssignedDepartmentsLabel(currentUserAccount?.assignedDepartment)})`
                     : 'Registrar: Add New Student'}
                 </span>
               </button>
             </div>
-        </div>
-      </header>
+          </div>
+
+          {/* All Data Student Number Summary Strip inside Header */}
+          <div className="pt-4 border-t border-white/15 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-4 text-xs">
+              <div className="bg-white/10 px-3 py-1.5 rounded-lg border border-white/15">
+                <span className="text-[10px] uppercase tracking-wider text-[#A9D3C2] block">
+                  All Years Total Students
+                </span>
+                <strong className="text-lg font-serif text-[#E0A526] tabular-nums">
+                  {formatNum(allDataSummary.allTot)}
+                </strong>
+              </div>
+              <div className="bg-white/10 px-3 py-1.5 rounded-lg border border-white/15">
+                <span className="text-[10px] uppercase tracking-wider text-[#A9D3C2] block">
+                  Total Male
+                </span>
+                <strong className="text-lg font-serif text-white tabular-nums">
+                  {formatNum(allDataSummary.allM)}
+                </strong>
+              </div>
+              <div className="bg-white/10 px-3 py-1.5 rounded-lg border border-white/15">
+                <span className="text-[10px] uppercase tracking-wider text-[#A9D3C2] block">
+                  Total Female
+                </span>
+                <strong className="text-lg font-serif text-rose-200 tabular-nums">
+                  {formatNum(allDataSummary.allF)}{' '}
+                  <span className="text-xs font-sans text-[#A9D3C2]">
+                    ({formatPct(allDataSummary.allFemalePct)})
+                  </span>
+                </strong>
+              </div>
+            </div>
+
+            {/* Interactive All Years + Individual Years Chips (auto-includes any newly added year) */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setYearFilter('')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                  yearFilter === ''
+                    ? 'bg-[#E0A526] text-[#221702]'
+                    : 'bg-white/10 hover:bg-white/20 text-white'
+                }`}
+              >
+                All Years ({formatNum(allDataSummary.allTot)})
+              </button>
+              {allDataSummary.byYear.map((yt) => (
+                <button
+                  key={yt.year}
+                  type="button"
+                  onClick={() => setYearFilter(yearFilter === String(yt.year) ? '' : String(yt.year))}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold transition-colors cursor-pointer tabular-nums ${
+                    yearFilter === String(yt.year)
+                      ? 'bg-[#E0A526] text-[#221702]'
+                      : 'bg-white/10 hover:bg-white/20 text-[#E7F3ED]'
+                  }`}
+                  title={`Filter ledger to ${yt.year} (${formatNum(yt.total)} students)`}
+                >
+                  {yt.year}: {formatNum(yt.total)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </header>
 
       {/* Department Lead Scope Banner */}
       {isDeptScoped && (
@@ -427,7 +562,7 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
             <span>
-              <strong>Department Admissions Lead:</strong> Authorized to add and edit student records exclusively for <strong>{assignedDept}</strong> ({currentUserAccount?.programLevelScope}).
+              <strong>Department Admissions Lead:</strong> Authorized to add student records exclusively for <strong>{assignedDeptDisplay}</strong> ({currentUserAccount?.programLevelScope}).
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -438,6 +573,45 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
               <span className="text-[11px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded">
                 ✓ Entry Finalized
               </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Pending Approval Workflow Banner */}
+      {pendingCount > 0 && (
+        <div className="bg-amber-50 dark:bg-amber-950/35 border-b border-amber-300 dark:border-amber-800 px-6 sm:px-8 py-3 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-950 dark:text-amber-200 no-print">
+          <div className="flex items-center gap-2.5">
+            <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span>
+              <strong>{pendingCount} Pending Data Entry Submission{pendingCount > 1 ? 's' : ''}</strong>{' '}
+              ({formatNum(allDataSummary.pendingStudents)} students):{' '}
+              {isAdmin
+                ? 'Review and approve new non-admin data entries below to include them in official institutional totals and reports.'
+                : 'New entries submitted by non-admin users await Administrator approval before counting toward official reports.'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setStatusFilter(statusFilter === 'pending' ? '' : 'pending')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                statusFilter === 'pending'
+                  ? 'bg-amber-600 text-white border-amber-600'
+                  : 'bg-white dark:bg-black/30 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-700 hover:bg-amber-100'
+              }`}
+            >
+              {statusFilter === 'pending' ? 'Show All Entries' : `Filter Pending Only (${pendingCount})`}
+            </button>
+            {isAdmin && onApproveAllPending && (
+              <button
+                type="button"
+                onClick={onApproveAllPending}
+                className="px-3.5 py-1.5 bg-[#0F4C3A] hover:bg-[#1A5C49] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-[#E0A526]" />
+                <span>Approve All Pending ({pendingCount})</span>
+              </button>
             )}
           </div>
         </div>
@@ -459,14 +633,16 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
               />
             </div>
 
-            {/* Year Filter */}
+            {/* Year Filter (Automatically updates whenever a new year is added) */}
             <select
               value={yearFilter}
               onChange={(e) => setYearFilter(e.target.value)}
               className="py-2 px-3 bg-white dark:bg-[#16221F] border border-[#BFCDC8] dark:border-[#384E47] rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#E0A526]"
             >
-              <option value="">All Years</option>
-              {YEARS.map((y) => (
+              <option value="">
+                All Years ({availableYears[0]}–{availableYears[availableYears.length - 1]})
+              </option>
+              {availableYears.map((y) => (
                 <option key={y} value={String(y)}>
                   {y}
                 </option>
@@ -474,11 +650,24 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
             </select>
 
             {/* Program Filter */}
-            {isScoped ? (
+            {isSingleProgramScoped ? (
               <div className="py-2 px-3 bg-[#EFF6F3] dark:bg-white/5 border border-[#BFCDC8] dark:border-[#384E47] rounded-lg text-xs font-semibold text-[#0F4C3A] dark:text-[#A9D3C2] flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 <span>Scope: {scopedProgramLevel}</span>
               </div>
+            ) : isMultiProgramScoped ? (
+              <select
+                value={programFilter}
+                onChange={(e) => setProgramFilter(e.target.value)}
+                className="py-2 px-3 bg-white dark:bg-[#16221F] border border-[#BFCDC8] dark:border-[#384E47] rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#E0A526]"
+              >
+                <option value="">All Assigned Levels ({scopedPrograms.length})</option>
+                {scopedPrograms.map((lvl) => (
+                  <option key={lvl} value={lvl}>
+                    {lvl}
+                  </option>
+                ))}
+              </select>
             ) : (
               <select
                 value={programFilter}
@@ -506,6 +695,18 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
                   {m}
                 </option>
               ))}
+            </select>
+
+            {/* Approval Status Filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as '' | RecordApprovalStatus)}
+              className="py-2 px-3 bg-white dark:bg-[#16221F] border border-[#BFCDC8] dark:border-[#384E47] rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#E0A526]"
+            >
+              <option value="">All Approval Statuses</option>
+              <option value="approved">Approved Only</option>
+              <option value="pending">Pending Approval ({pendingCount})</option>
+              <option value="rejected">Rejected</option>
             </select>
           </div>
 
@@ -552,7 +753,7 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
           <div className="flex items-center gap-2 p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg text-xs text-emerald-900 dark:text-emerald-200">
             <Lock className="w-4 h-4 text-[#0F4C3A] dark:text-[#A9D3C2] shrink-0" />
             <span>
-              <strong>Add-Only Data Policy:</strong> You are authorized to <strong>add new student admissions records</strong>. Modifying or deleting existing institutional data is restricted to Administrator.
+              <strong>Non-Admin View & Submit Policy:</strong> You can view the student list and <strong>submit new student entries</strong> for approval. New data requires <strong>sole Administrator approval</strong>; editing, approving, or deleting records is restricted to Administrator.
             </span>
           </div>
         )}
@@ -560,10 +761,15 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
         <div className="flex items-center justify-between text-xs text-[#5B6B70] dark:text-[#9DB0AA]">
           <span>
             Displaying <strong className="text-[#17262B] dark:text-white">{filtered.length}</strong> of{' '}
-            <strong className="text-[#17262B] dark:text-white">{records.length}</strong> verified entries
+            <strong className="text-[#17262B] dark:text-white">{records.length}</strong> ledger entries
+            {pendingCount > 0 && (
+              <span className="ml-2 text-amber-700 dark:text-amber-300 font-semibold">
+                · {pendingCount} pending admin approval
+              </span>
+            )}
           </span>
           <span className="italic">
-            Use the top inline row or the "Add New Data Record" button to append entries anytime.
+            Use the top inline row or the "Add New Data Record" button to submit entries anytime.
           </span>
         </div>
       </div>
@@ -649,6 +855,7 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
               </th>
               <th className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">Female %</th>
               <th className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">Source Cell</th>
+              <th className="py-2.5 px-3 font-semibold text-center whitespace-nowrap">Approval Status</th>
               <th className="py-2.5 px-3 font-semibold text-center whitespace-nowrap">
                 {canEditOrDelete ? 'Actions' : 'Policy'}
               </th>
@@ -662,19 +869,41 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
                 <td className="p-1.5">
                   <input
                     type="number"
-                    value={quickYear}
+                    list="quick-year-datalist"
+                    min="1900"
+                    max="2200"
+                    value={quickYear || ''}
                     onChange={(e) => setQuickYear(parseInt(e.target.value, 10))}
-                    className="w-16 px-1.5 py-1 text-xs border border-[#A2C4B7] rounded bg-white dark:bg-[#101A17] font-mono text-center"
+                    className="w-20 px-1.5 py-1 text-xs border border-[#A2C4B7] rounded bg-white dark:bg-[#101A17] font-mono text-center"
                     placeholder="Year"
                   />
+                  <datalist id="quick-year-datalist">
+                    {Array.from(new Set([...availableYears, latestAvailableYear + 1]))
+                      .sort((a, b) => a - b)
+                      .map((yr) => (
+                        <option key={yr} value={yr} />
+                      ))}
+                  </datalist>
                 </td>
 
                 {/* Program Level */}
                 <td className="p-1.5 min-w-[150px]">
-                  {isScoped ? (
+                  {isSingleProgramScoped ? (
                     <div className="w-full px-2 py-1 text-xs border border-[#A2C4B7] rounded bg-white dark:bg-[#101A17] font-semibold text-[#0F4C3A] dark:text-[#A9D3C2] truncate">
                       {scopedProgramLevel}
                     </div>
+                  ) : isMultiProgramScoped ? (
+                    <select
+                      value={scopedPrograms.includes(quickProgram) ? quickProgram : scopedPrograms[0]}
+                      onChange={(e) => setQuickProgram(e.target.value)}
+                      className="w-full px-1.5 py-1 text-xs border border-[#A2C4B7] rounded bg-white dark:bg-[#101A17] font-semibold text-[#0F4C3A] dark:text-[#A9D3C2]"
+                    >
+                      {scopedPrograms.map((lvl) => (
+                        <option key={lvl} value={lvl}>
+                          {lvl}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
                     <select
                       value={quickProgram}
@@ -692,10 +921,22 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
 
                 {/* Department (Lists all departments on click + allows adding new department) */}
                 <td className="p-1.5 min-w-[210px] relative">
-                  {isDeptScoped ? (
+                  {isSingleAssignedDept ? (
                     <div className="w-full px-2 py-1 text-xs border border-[#A2C4B7] rounded bg-white dark:bg-[#101A17] font-bold text-[#0F4C3A] dark:text-[#A9D3C2] truncate">
-                      {assignedDept}
+                      {assignedDepts[0]}
                     </div>
+                  ) : isDeptScoped ? (
+                    <select
+                      value={assignedDepts.includes(quickDepartment) ? quickDepartment : assignedDepts[0]}
+                      onChange={(e) => setQuickDepartment(e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-[#A2C4B7] rounded bg-white dark:bg-[#101A17] font-bold text-[#0F4C3A] dark:text-[#A9D3C2]"
+                    >
+                      {assignedDepts.map((dept) => (
+                        <option key={dept} value={dept}>
+                          {dept}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
                     <div ref={deptDropdownRef} className="relative w-full">
                       <div className="relative flex items-center">
@@ -883,15 +1124,28 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
                   />
                 </td>
 
-                {/* Actions: Add Button */}
+                {/* Approval Status Preview */}
+                <td className="p-1.5 text-center whitespace-nowrap">
+                  <span
+                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      isAdmin
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                    }`}
+                  >
+                    {isAdmin ? 'Auto-Approved' : 'Pending Approval'}
+                  </span>
+                </td>
+
+                {/* Actions: Add / Submit Button */}
                 <td className="p-1.5 text-center">
                   <button
                     onClick={() => handleQuickAdd()}
                     className="px-3 py-1 bg-[#0F4C3A] hover:bg-[#1A5C49] text-white rounded font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer shadow-xs mx-auto"
-                    title="Add this row directly to data registry"
+                    title={isAdmin ? 'Add & approve this row directly' : 'Submit row for Administrator approval'}
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Add</span>
+                    <span>{isAdmin ? 'Add' : 'Submit'}</span>
                   </button>
                 </td>
               </tr>
@@ -899,7 +1153,7 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
 
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={11} className="py-8 text-center text-sm text-[#5B6B70]">
+                <td colSpan={12} className="py-8 text-center text-sm text-[#5B6B70]">
                   No records match your filter criteria. Clear filters to see all rows.
                 </td>
               </tr>
@@ -907,9 +1161,20 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
               filtered.map(({ r, originalIndex }) => {
                 const tot = (r[5] || 0) + (r[6] || 0);
                 const fPct = tot > 0 ? ((r[6] || 0) / tot) * 100 : null;
+                const approvalStatus = getRecordApprovalStatus(r);
+                const submittedBy = r[10];
 
                 return (
-                  <tr key={`record-${originalIndex}`} className="hover:bg-[#F7FAF8] dark:hover:bg-white/5">
+                  <tr
+                    key={`record-${originalIndex}`}
+                    className={
+                      approvalStatus === 'pending'
+                        ? 'bg-amber-50/50 dark:bg-amber-950/15 hover:bg-amber-50 dark:hover:bg-amber-950/30'
+                        : approvalStatus === 'rejected'
+                        ? 'bg-rose-50/40 dark:bg-rose-950/15 hover:bg-rose-50/70'
+                        : 'hover:bg-[#F7FAF8] dark:hover:bg-white/5'
+                    }
+                  >
                     <td key="year" className="py-2 px-3 font-medium text-[#1A2E26] dark:text-[#E7EFEC] font-mono">{r[0]}</td>
                     <td key="prog" className="py-2 px-3 text-[#52665F] dark:text-[#A9D3C2]">{r[1]}</td>
                     <td key="dept" className="py-2 px-3 font-medium text-[#17262B] dark:text-white">{r[2]}</td>
@@ -926,9 +1191,63 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
                     <td key="src" className="py-2 px-3 text-right font-mono text-xs text-[#6A8077] dark:text-[#8E9F99]">
                       {r[8] || '–'}
                     </td>
+                    <td key="status" className="py-2 px-3 text-center whitespace-nowrap">
+                      {approvalStatus === 'approved' ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>Approved</span>
+                        </span>
+                      ) : approvalStatus === 'pending' ? (
+                        <div className="inline-flex flex-col items-center gap-0.5">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                            <Clock className="w-3 h-3" />
+                            <span>Pending</span>
+                          </span>
+                          {submittedBy && (
+                            <span className="text-[10px] text-amber-700 dark:text-amber-400 font-mono">
+                              by @{submittedBy}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="inline-flex flex-col items-center gap-0.5">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/70 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-700">
+                            <XCircle className="w-3 h-3" />
+                            <span>Rejected</span>
+                          </span>
+                          {submittedBy && (
+                            <span className="text-[10px] text-rose-700 dark:text-rose-400 font-mono">
+                              by @{submittedBy}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
                     <td key="actn" className="py-2 px-3 text-center">
                       {canEditOrDelete ? (
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                          {approvalStatus !== 'approved' && onApproveRecord && (
+                            <button
+                              type="button"
+                              onClick={() => onApproveRecord(r, originalIndex)}
+                              className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Approve this data entry to include in official student counts"
+                            >
+                              <Check className="w-3 h-3" />
+                              <span>Approve</span>
+                            </button>
+                          )}
+                          {approvalStatus === 'pending' && onRejectRecord && (
+                            <button
+                              type="button"
+                              onClick={() => onRejectRecord(r, originalIndex)}
+                              className="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Reject this pending submission"
+                            >
+                              <XCircle className="w-3 h-3" />
+                              <span>Reject</span>
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => onEditRecord(r, originalIndex)}
@@ -949,10 +1268,10 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
                       ) : (
                         <span
                           className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#5B6B70] dark:text-[#9DB0AA] bg-[#EFF5F2] dark:bg-white/5 px-2 py-0.5 rounded-full"
-                          title="Users can only add new records. Modifying or deleting existing entries is reserved for Administrator."
+                          title="Non-admin users can view and submit new entries. Editing, approving, or deleting records is reserved for Administrator."
                         >
                           <Lock className="w-2.5 h-2.5 text-[#0F4C3A] dark:text-[#A9D3C2]" />
-                          <span>Add Only</span>
+                          <span>{approvalStatus === 'pending' ? 'Awaiting Admin' : 'Read / Add Only'}</span>
                         </span>
                       )}
                     </td>
@@ -968,7 +1287,7 @@ export const DataLedgerView: React.FC<DataLedgerViewProps> = ({
               <td className="py-2.5 px-3 text-right tabular-nums">{formatNum(totalFemale)}</td>
               <td className="py-2.5 px-3 text-right tabular-nums text-[#0F4C3A] dark:text-[#E0A526]">{formatNum(grandTotal)}</td>
               <td className="py-2.5 px-3 text-right tabular-nums text-[#8D4258] dark:text-[#E88EA8]">{formatPct(overallFemalePct)}</td>
-              <td className="py-2.5 px-3" colSpan={2}></td>
+              <td className="py-2.5 px-3" colSpan={3}></td>
             </tr>
           </tbody>
         </table>

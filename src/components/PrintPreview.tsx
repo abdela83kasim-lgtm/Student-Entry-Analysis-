@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { ReportDocument } from '../types';
-import { AnalyticsResult } from '../data/analytics';
+import { AnalyticsResult, resolveDynamicReportTitle } from '../data/analytics';
 import { ReportPaper } from './ReportPaper';
-import { Printer, ArrowLeft, CheckCircle2, Download, Loader2 } from 'lucide-react';
-import { exportReportToPDF } from '../utils/exportPdf';
+import { Printer, ArrowLeft, Download, Loader2, FileText } from 'lucide-react';
+import { exportReportToPDF, ensureImagesLoadedForPrint } from '../utils/exportPdf';
 
 interface PrintPreviewProps {
   report: ReportDocument;
@@ -19,28 +19,40 @@ export const PrintPreview: React.FC<PrintPreviewProps> = ({
   onPrint
 }) => {
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingDocx, setIsExportingDocx] = useState(false);
+  const resolvedName = resolveDynamicReportTitle(report.name, analytics.years);
+  const resolvedReport: ReportDocument = { ...report, name: resolvedName };
 
   const handlePrintAndSave = async () => {
     setIsExporting(true);
-    let printAttempted = false;
     try {
+      const paperEl = document.getElementById('osu-report-paper');
+      if (paperEl) {
+        await ensureImagesLoadedForPrint(paperEl);
+      }
       if (typeof window !== 'undefined' && window.print) {
         window.print();
-        printAttempted = true;
       }
     } catch (err) {
       console.warn('Browser print blocked or unsupported in iframe:', err);
     }
 
-    // Always generate high-fidelity PDF so the action reliably produces the document
-    await exportReportToPDF('osu-report-paper', `${report.name || 'OSU_Report'}.pdf`);
+    // Always generate high-fidelity PDF with logo so the action reliably produces the document
+    await exportReportToPDF('osu-report-paper', `${resolvedName || 'OSU_Report'}.pdf`);
     setIsExporting(false);
   };
 
   const handleDirectPDF = async () => {
     setIsExporting(true);
-    await exportReportToPDF('osu-report-paper', `${report.name || 'OSU_Report'}.pdf`);
+    await exportReportToPDF('osu-report-paper', `${resolvedName || 'OSU_Report'}.pdf`);
     setIsExporting(false);
+  };
+
+  const handleDirectDOCX = async () => {
+    setIsExportingDocx(true);
+    const { exportReportToDOCX } = await import('../utils/exportDocx');
+    await exportReportToDOCX(resolvedReport, analytics, `${resolvedName || 'OSU_Report'}.docx`);
+    setIsExportingDocx(false);
   };
 
   return (
@@ -62,6 +74,16 @@ export const PrintPreview: React.FC<PrintPreviewProps> = ({
 
         <div className="flex flex-wrap items-center gap-2.5">
           <button
+            onClick={handleDirectDOCX}
+            disabled={isExportingDocx}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-[#1F7A5C] hover:bg-[#176148] text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-60"
+            title="Generate and download Word (.docx) document with official OSU logo"
+          >
+            {isExportingDocx ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+            <span>{isExportingDocx ? 'Generating DOCX...' : 'Download DOCX (With Logo)'}</span>
+          </button>
+
+          <button
             onClick={handleDirectPDF}
             disabled={isExporting}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-[#E0A526] hover:bg-[#D4991E] text-[#221702] rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-60"
@@ -75,19 +97,19 @@ export const PrintPreview: React.FC<PrintPreviewProps> = ({
             onClick={handlePrintAndSave}
             disabled={isExporting}
             className="flex items-center gap-2 px-4 py-2 bg-[#0F4C3A] hover:bg-[#1A5C49] text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-60"
-            title="Open browser print dialog or save as PDF"
+            title="Open System Print dialog with official OSU logo and save PDF"
           >
             {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
-            <span>{isExporting ? 'Generating PDF...' : 'Open System Print / Save PDF'}</span>
+            <span>{isExporting ? 'Preparing Print & PDF...' : 'Open System Print / Save PDF'}</span>
           </button>
         </div>
       </div>
 
       {/* Simulated A4 Paper */}
-      <div className="p-4 sm:p-8 bg-[#DCE4E0] rounded-xl flex justify-center shadow-inner overflow-x-auto">
-        <div className="w-full max-w-[850px] shadow-2xl bg-white">
+      <div className="print-paper-wrapper p-4 sm:p-8 bg-[#DCE4E0] rounded-xl flex justify-center shadow-inner overflow-x-auto">
+        <div className="print-paper-frame w-full max-w-[850px] shadow-2xl bg-white">
           <ReportPaper
-            report={report}
+            report={resolvedReport}
             analytics={analytics}
             isEditing={false}
             onUpdateReport={() => {}}

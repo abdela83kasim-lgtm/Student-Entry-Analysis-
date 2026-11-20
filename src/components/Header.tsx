@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActiveView, UserAccount } from '../types';
+import { ActiveView, UserAccount, LIVE_PORTAL_URL, parseAssignedDepartments, formatAssignedDepartmentsLabel, formatProgramLevelScopeLabel } from '../types';
 import {
   Printer,
   Save,
@@ -17,8 +17,22 @@ import {
   Building2,
   Users,
   Download,
-  BookOpen
+  BookOpen,
+  FileSpreadsheet,
+  MessageSquare,
+  ExternalLink
 } from 'lucide-react';
+
+interface HeaderAnalyticsSummary {
+  totalStudents: number;
+  totalMale: number;
+  totalFemale: number;
+  overallFemaleShare: number;
+  years: number[];
+  totalRecords: number;
+  departmentCount: number;
+  yearTotals: { year: number; total: number }[];
+}
 
 interface HeaderProps {
   currentUser: string | null;
@@ -26,6 +40,8 @@ interface HeaderProps {
   activeView: ActiveView;
   onViewChange: (view: ActiveView) => void;
   onPrint: () => void;
+  onDownloadPDF?: () => void;
+  onExportDOCX?: () => void;
   onSave: () => void;
   onNewReport: () => void;
   onAddDataRecord: () => void;
@@ -40,8 +56,13 @@ interface HeaderProps {
   onOpenLoginHistory: () => void;
   onOpenUserManagement?: () => void;
   onOpenDocumentation?: () => void;
+  onOpenGoogleSheets?: () => void;
+  onOpenGoogleChat?: () => void;
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
+  analyticsSummary?: HeaderAnalyticsSummary;
+  pendingApprovalCount?: number;
+  onOpenPendingApprovals?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -50,6 +71,8 @@ export const Header: React.FC<HeaderProps> = ({
   activeView,
   onViewChange,
   onPrint,
+  onDownloadPDF,
+  onExportDOCX,
   onSave,
   onNewReport,
   onAddDataRecord,
@@ -64,9 +87,23 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenLoginHistory,
   onOpenUserManagement,
   onOpenDocumentation,
+  onOpenGoogleSheets,
+  onOpenGoogleChat,
   sidebarOpen = false,
-  onToggleSidebar
+  onToggleSidebar,
+  analyticsSummary,
+  pendingApprovalCount = 0,
+  onOpenPendingApprovals
 }) => {
+  const isAdmin = currentUserAccount?.role === 'admin';
+  const yearsList = analyticsSummary?.years || [];
+  const yearSpanLabel =
+    yearsList.length > 1
+      ? `${yearsList[0]}–${yearsList[yearsList.length - 1]}`
+      : yearsList.length === 1
+      ? String(yearsList[0])
+      : 'All Years';
+
   return (
     <header className="app-header sticky top-0 z-40 bg-[#0F4C3A] text-white border-b border-[#0A3428] shadow-sm transition-colors">
       {/* =========================================================================
@@ -112,12 +149,24 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right: User Profile Card & Top System Buttons */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* User Profile / Admin Management Button */}
-          {currentUserAccount?.role === 'admin' ? (
+          {/* Pending Data Approval Alert for Sole Admin */}
+          {isAdmin && pendingApprovalCount > 0 && (
+            <button
+              type="button"
+              onClick={onOpenPendingApprovals || (() => onViewChange('data'))}
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-[#E0A526] hover:bg-[#D4991E] text-[#221702] rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer animate-pulse"
+              title="New student data entries awaiting Administrator approval"
+            >
+              <span>{pendingApprovalCount} Pending Approval</span>
+            </button>
+          )}
+
+          {/* User Profile / Admin Management Button (Admin Only can view/add/edit/switch users) */}
+          {isAdmin ? (
             <button
               onClick={onOpenUserManagement}
               className="flex items-center gap-2 px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-xl transition-colors cursor-pointer border border-[#E0A526]/60 text-left shadow-2xs"
-              title="Super Admin: Click to manage users, department assignments & passwords"
+              title="Admin Only: View, add, edit, switch users & manage passwords"
             >
               <Shield className="w-3.5 h-3.5 text-[#E0A526] shrink-0" />
               <div className="leading-tight hidden sm:block">
@@ -129,32 +178,45 @@ export const Header: React.FC<HeaderProps> = ({
                     ADMIN
                   </span>
                 </div>
-                <span className="block text-[9px] text-[#A9D3C2] truncate max-w-[140px]">
-                  Manage Users & Passwords
+                <span className="block text-[9px] text-[#A9D3C2] truncate max-w-[170px]">
+                  View, Add & Edit Users
                 </span>
               </div>
             </button>
           ) : (
             <div
               className="flex items-center gap-2 px-2.5 py-1 bg-white/10 rounded-xl border border-white/15 text-left select-none"
-              title={`Logged in as ${currentUserAccount?.name}. Scope restricted to ${currentUserAccount?.programLevelScope}.`}
+              title={`Logged in as ${currentUserAccount?.name}. Non-Admin access (${currentUserAccount?.programLevelScope}).`}
             >
               <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
               <div className="leading-tight hidden sm:block">
-                <span className="block font-bold text-white text-xs truncate max-w-[130px]">
+                <span className="block font-bold text-white text-xs truncate max-w-[140px]">
                   {currentUserAccount?.name || currentUser}
                 </span>
-                <span className="block text-[9px] text-[#A9D3C2] truncate max-w-[140px]">
-                  {currentUserAccount?.assignedDepartment && currentUserAccount.assignedDepartment !== 'ALL'
-                    ? `Dept: ${currentUserAccount.assignedDepartment}`
-                    : `Scope: ${currentUserAccount?.programLevelScope || 'All'}`}
+                <span className="block text-[9px] text-[#A9D3C2] truncate max-w-[175px]">
+                  {currentUserAccount?.role === 'all_viewer'
+                    ? 'All Student List · Non-Admin'
+                    : parseAssignedDepartments(currentUserAccount?.assignedDepartment).length > 0
+                    ? `Dept: ${formatAssignedDepartmentsLabel(currentUserAccount?.assignedDepartment)}`
+                    : `Scope: ${formatProgramLevelScopeLabel(currentUserAccount?.programLevelScope)}`}
                 </span>
               </div>
             </div>
           )}
 
-          {/* Quick System Controls: Theme, History, Password, Logout */}
+          {/* Quick System Controls: Live Portal Link, Theme, Admin History, Admin Password, Logout */}
           <div className="flex items-center gap-1 pl-1.5 border-l border-white/20">
+            <a
+              href={LIVE_PORTAL_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden md:inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-[#D2E4DC] hover:text-white hover:bg-white/10 rounded-lg transition-colors border border-white/15"
+              title="Open Live Portal (osu-active-studente.netlify.app)"
+            >
+              <ExternalLink className="w-3 h-3 text-[#E0A526]" />
+              <span>Live Portal</span>
+            </a>
+
             <button
               onClick={onToggleDarkMode}
               className="p-1.5 text-[#C4DDD2] hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
@@ -164,20 +226,22 @@ export const Header: React.FC<HeaderProps> = ({
               {darkMode ? <Sun className="w-3.5 h-3.5 text-[#E0A526]" /> : <Moon className="w-3.5 h-3.5" />}
             </button>
 
-            <button
-              onClick={onOpenLoginHistory}
-              className="p-1.5 text-[#9CC7B7] hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
-              title="View Login History"
-              aria-label="View Login History"
-            >
-              <History className="w-3.5 h-3.5" />
-            </button>
+            {isAdmin && (
+              <button
+                onClick={onOpenLoginHistory}
+                className="p-1.5 text-[#9CC7B7] hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+                title="View Login History (Admin Only)"
+                aria-label="View Login History"
+              >
+                <History className="w-3.5 h-3.5" />
+              </button>
+            )}
 
             <button
               onClick={onOpenChangePassword}
               className="p-1.5 text-[#9CC7B7] hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
-              title="Change Admin Password"
-              aria-label="Change Admin Password"
+              title={`Change My Personal Password (@${currentUserAccount?.username || 'user'})`}
+              aria-label="Change Personal Password"
             >
               <Key className="w-3.5 h-3.5" />
             </button>
@@ -193,6 +257,78 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </div>
+
+      {/* =========================================================================
+          UNIFIED ONE-HEADER ALL DATA STUDENT NUMBER VIEW
+         ========================================================================= */}
+      {analyticsSummary && (
+        <div className="bg-[#093528] px-3 sm:px-5 lg:px-6 py-1.5 border-b border-white/10 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+          <button
+            type="button"
+            onClick={() => onViewChange('data')}
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 text-left hover:bg-white/5 px-2 py-0.5 -mx-2 rounded-lg transition-colors cursor-pointer"
+            title="Click to open full Student Data Ledger"
+          >
+            <span className="inline-flex items-center gap-1.5 font-bold uppercase tracking-wider text-[#E0A526]">
+              <Users className="w-3.5 h-3.5" />
+              <span>All Data Student Numbers ({yearSpanLabel}):</span>
+            </span>
+
+            <span className="text-[#D2E4DC]">
+              Total:{' '}
+              <strong className="text-white font-mono text-xs tabular-nums">
+                {analyticsSummary.totalStudents.toLocaleString('en-US')}
+              </strong>
+            </span>
+
+            <span className="text-white/25">·</span>
+
+            <span className="text-[#D2E4DC]">
+              Male:{' '}
+              <strong className="text-[#A9D3C2] font-mono tabular-nums">
+                {analyticsSummary.totalMale.toLocaleString('en-US')}
+              </strong>
+            </span>
+
+            <span className="text-white/25">·</span>
+
+            <span className="text-[#D2E4DC]">
+              Female:{' '}
+              <strong className="text-rose-300 font-mono tabular-nums">
+                {analyticsSummary.totalFemale.toLocaleString('en-US')}
+              </strong>{' '}
+              <span className="text-[#9CC7B7]">
+                ({analyticsSummary.overallFemaleShare.toFixed(1)}%)
+              </span>
+            </span>
+
+            <span className="text-white/25 hidden md:inline">·</span>
+
+            <span className="text-[#9CC7B7] hidden md:inline">
+              Depts: <strong className="text-white tabular-nums">{analyticsSummary.departmentCount}</strong> · Records:{' '}
+              <strong className="text-white tabular-nums">{analyticsSummary.totalRecords}</strong>
+            </span>
+          </button>
+
+          {/* Dynamic per-year student counts in header (auto-updates whenever a new year is added) */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+            <span className="text-[10px] uppercase tracking-wider text-[#9CC7B7] font-semibold whitespace-nowrap">
+              By Year:
+            </span>
+            {analyticsSummary.yearTotals.map((yt) => (
+              <button
+                key={yt.year}
+                type="button"
+                onClick={() => onViewChange('data')}
+                className="px-2 py-0.5 rounded bg-white/10 hover:bg-[#E0A526] hover:text-[#221702] text-[#E7F3ED] font-mono text-[10px] font-semibold transition-colors whitespace-nowrap cursor-pointer tabular-nums"
+                title={`${yt.year}: ${yt.total.toLocaleString('en-US')} active students`}
+              >
+                {yt.year}: {yt.total.toLocaleString('en-US')}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* =========================================================================
           TIER 2 (DOWN ROW PARALLEL): All Buttons Listed Directly (No Dropdowns)
@@ -275,6 +411,8 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Documentation PDF</span>
           </button>
 
+
+
           {/* 2. Save Report Button */}
           <button
             onClick={onSave}
@@ -303,11 +441,35 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={onPrint}
             className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-[#113127] bg-[#E7F3ED] hover:bg-white rounded-lg transition-colors shadow-xs cursor-pointer whitespace-nowrap"
-            title="Print or export current report"
+            title="Open System Print dialog with official OSU logo and save PDF"
           >
             <Printer className="w-3.5 h-3.5 text-[#0F4C3A]" />
             <span>Print Report</span>
           </button>
+
+          {/* 3a. Direct Download PDF (With Logo) Button */}
+          {onDownloadPDF && (
+            <button
+              onClick={onDownloadPDF}
+              className="flex items-center gap-1.5 px-3 py-1 text-xs font-bold bg-[#E0A526] hover:bg-[#D4991E] text-[#221702] rounded-lg transition-colors shadow-xs cursor-pointer whitespace-nowrap"
+              title="Download official report PDF with embedded OSU logo"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download PDF</span>
+            </button>
+          )}
+
+          {/* 3b. Generate DOCX (With Logo) Button */}
+          {onExportDOCX && (
+            <button
+              onClick={onExportDOCX}
+              className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white bg-[#1F7A5C] hover:bg-[#248A68] border border-white/20 rounded-lg transition-colors shadow-xs cursor-pointer whitespace-nowrap"
+              title="Generate and download Word (.docx) report with official OSU logo"
+            >
+              <FileText className="w-3.5 h-3.5 text-[#E0A526]" />
+              <span>Generate DOCX</span>
+            </button>
+          )}
 
 
           {/* 4. Edit Report Button (Admin only on report view) */}

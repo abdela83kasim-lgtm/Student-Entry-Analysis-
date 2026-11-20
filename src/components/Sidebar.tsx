@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { ReportDocument } from '../types';
+import { ReportDocument, UserAccount, LIVE_PORTAL_URL } from '../types';
+import { resolveDynamicReportTitle } from '../data/analytics';
 import {
   FileText,
   Plus,
@@ -13,12 +14,15 @@ import {
   ChevronUp,
   Download,
   Check,
-  X
+  X,
+  ExternalLink
 } from 'lucide-react';
 
 interface SidebarProps {
   reports: ReportDocument[];
   activeReportId: string;
+  analyticsYears?: number[];
+  currentUserAccount?: UserAccount;
   onSelectReport: (id: string) => void;
   onNewReport: () => void;
   onDuplicateReport: (report: ReportDocument) => void;
@@ -27,6 +31,7 @@ interface SidebarProps {
   onRebuildReport: () => void;
   onExportJSON: () => void;
   onExportHTML: () => void;
+  onExportDOCX?: () => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   isOpen?: boolean;
@@ -35,6 +40,8 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({
   reports,
   activeReportId,
+  analyticsYears,
+  currentUserAccount,
   onSelectReport,
   onNewReport,
   onDuplicateReport,
@@ -43,6 +50,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onRebuildReport,
   onExportJSON,
   onExportHTML,
+  onExportDOCX,
   isOpenMobile,
   onCloseMobile,
   isOpen = false
@@ -51,6 +59,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [reportsExpanded, setReportsExpanded] = useState(true);
   const [exportOpen, setExportOpen] = useState(false);
 
+  const isAdmin = currentUserAccount?.role === 'admin';
   const activeReport = reports.find((r) => r.id === activeReportId) || reports[0];
 
   const formatTimestamp = (ts: number) => {
@@ -81,17 +90,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ? 'hidden lg:flex'
             : 'hidden'
         }`}
-        aria-label="Report Studio Sidebar"
+        aria-label="Oromia State University Student Report Sidebar"
       >
         {/* Top Action & Close */}
         <div className="flex items-center gap-2 mb-4">
-          <button
-            onClick={onNewReport}
-            className="flex-1 py-2.5 px-4 bg-[#E0A526] hover:bg-[#D4991E] text-[#221702] font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Create New Report</span>
-          </button>
+          {isAdmin ? (
+            <button
+              onClick={onNewReport}
+              className="flex-1 py-2.5 px-4 bg-[#E0A526] hover:bg-[#D4991E] text-[#221702] font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create New Report</span>
+            </button>
+          ) : (
+            <div className="flex-1 py-2 px-3 bg-white/10 text-[#A0CBB9] text-xs font-semibold rounded-lg flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5 text-[#E0A526]" />
+              <span>Report Navigation</span>
+            </div>
+          )}
           <button
             onClick={onCloseMobile}
             className="p-2 text-[#A0CBB9] hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
@@ -134,37 +150,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       }}
                       className="flex-1 text-left min-w-0 cursor-pointer"
                     >
-                      <div className="font-semibold truncate text-[#F4F9F6]">{r.name}</div>
+                      <div className="font-semibold truncate text-[#F4F9F6]">
+                        {resolveDynamicReportTitle(r.name, analyticsYears)}
+                      </div>
                       <div className="text-[11px] text-[#91B8A8] truncate">
                         {r.status} · {formatTimestamp(r.updatedAt)}
                       </div>
                     </button>
 
-                    <div className="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDuplicateReport(r);
-                        }}
-                        title="Duplicate report"
-                        className="p-1 text-[#91B8A8] hover:text-white hover:bg-white/10 rounded transition-colors cursor-pointer"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-
-                      {reports.length > 1 && (
+                    {isAdmin && (
+                      <div className="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            onDeleteReport(r.id);
+                            onDuplicateReport(r);
                           }}
-                          title="Delete report"
-                          className="p-1 text-[#91B8A8] hover:text-red-300 hover:bg-white/10 rounded transition-colors cursor-pointer"
+                          title="Duplicate report"
+                          className="p-1 text-[#91B8A8] hover:text-white hover:bg-white/10 rounded transition-colors cursor-pointer"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Copy className="w-3.5 h-3.5" />
                         </button>
-                      )}
-                    </div>
+
+                        {reports.length > 1 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteReport(r.id);
+                            }}
+                            title="Delete report"
+                            className="p-1 text-[#91B8A8] hover:text-red-300 hover:bg-white/10 rounded transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </li>
                 );
               })}
@@ -194,7 +214,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {activeReport.sections.map((sec) => (
                   <label
                     key={sec.id}
-                    className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md text-xs cursor-pointer transition-colors ${
+                    className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md text-xs transition-colors ${
+                      isAdmin ? 'cursor-pointer' : 'cursor-default opacity-80'
+                    } ${
                       sec.enabled
                         ? 'bg-white/5 text-[#E7F3ED] hover:bg-white/10'
                         : 'text-[#7D9E92] hover:bg-white/5'
@@ -204,8 +226,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <input
                       type="checkbox"
                       checked={sec.enabled}
-                      onChange={() => onToggleSection(sec.id)}
-                      className="accent-[#E0A526] w-4 h-4 cursor-pointer"
+                      disabled={!isAdmin}
+                      onChange={() => {
+                        if (isAdmin) onToggleSection(sec.id);
+                      }}
+                      className="accent-[#E0A526] w-4 h-4 cursor-pointer disabled:cursor-not-allowed"
                     />
                   </label>
                 ))}
@@ -216,14 +241,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Section 3: Document Maintenance & Sync */}
         <div className="space-y-2 mt-auto pt-2">
-          <button
-            onClick={onRebuildReport}
-            className="w-full py-2 px-3 bg-white/10 hover:bg-white/15 text-[#E4F1EB] rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer border border-white/10"
-            title="Recalculates all tables and statistics from the raw data registry"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-[#E0A526]" />
-            <span>Rebuild from Data Ledger</span>
-          </button>
+          {isAdmin && (
+            <button
+              onClick={onRebuildReport}
+              className="w-full py-2 px-3 bg-white/10 hover:bg-white/15 text-[#E4F1EB] rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer border border-white/10"
+              title="Recalculates all tables and statistics from the raw data registry"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-[#E0A526]" />
+              <span>Rebuild from Data Ledger</span>
+            </button>
+          )}
 
           {/* Export Dropdown */}
           <div className="relative">
@@ -240,12 +267,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {exportOpen && (
               <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#16382D] border border-white/15 rounded-lg shadow-xl p-1.5 z-40 text-xs space-y-1">
+                {onExportDOCX && (
+                  <button
+                    onClick={() => {
+                      onExportDOCX();
+                      setExportOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-1.5 rounded hover:bg-white/10 text-white flex items-center justify-between cursor-pointer"
+                  >
+                    <span>Export Report (DOCX)</span>
+                    <span className="text-[10px] text-[#E0A526] font-semibold">With Logo</span>
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     onExportHTML();
                     setExportOpen(false);
                   }}
-                  className="w-full text-left px-3 py-1.5 rounded hover:bg-white/10 text-white flex items-center justify-between"
+                  className="w-full text-left px-3 py-1.5 rounded hover:bg-white/10 text-white flex items-center justify-between cursor-pointer"
                 >
                   <span>Export Report (HTML)</span>
                   <span className="text-[10px] text-[#9CC7B7]">Standalone</span>
@@ -263,6 +302,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
           </div>
+
+          <a
+            href={LIVE_PORTAL_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-2 px-3 bg-white/5 hover:bg-white/10 text-[#A9D3C2] hover:text-white rounded-lg text-xs font-medium flex items-center justify-between transition-colors border border-white/5"
+            title="Open official live portal on Netlify"
+          >
+            <span className="truncate">osu-active-studente.netlify.app</span>
+            <ExternalLink className="w-3.5 h-3.5 shrink-0 text-[#E0A526]" />
+          </a>
         </div>
       </aside>
     </>

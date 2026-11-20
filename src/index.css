@@ -27,9 +27,12 @@
     margin: 12mm 10mm 14mm 10mm;
   }
 
+  html,
   body {
     background: #ffffff !important;
     color: #17262b !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   .no-print,
@@ -50,15 +53,56 @@
     margin: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
+    overflow: visible !important;
+  }
+
+  .print-paper-wrapper {
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  .print-paper-frame {
+    box-shadow: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
   }
 
   .report-sheet {
     box-shadow: none !important;
     border: none !important;
+    border-radius: 0 !important;
     max-width: 100% !important;
+    width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
     outline: none !important;
+    overflow: visible !important;
+  }
+
+  .report-letterhead {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    background-color: #0F4C3A !important;
+    color: #ffffff !important;
+  }
+
+  .report-letterhead img {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .report-scroll-table {
+    max-height: none !important;
+    overflow: visible !important;
   }
 
   .page-break-avoid {

@@ -1,12 +1,11 @@
 {
-  "projectId": "southern-dogfish-gw1rw",
-  "appId": "1:241172583906:web:5db97c313571b524cc95bb",
-  "apiKey": "AIzaSyCZMfyYLN9gaMDHckdP0fsh5Zwc1WDOIs0",
-  "authDomain": "southern-dogfish-gw1rw.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-remixosuactivest-b4d950bc-9704-478c-82cb-9038a3c3a61c",
-  "storageBucket": "southern-dogfish-gw1rw.firebasestorage.app",
-  "messagingSenderId": "241172583906",
+  "projectId": "gen-lang-client-0720495597",
+  "appId": "1:3955142674:web:4ba9c57159fa321093a8cb",
+  "apiKey": "AIzaSyBkfenjDhlsJAGBH36-Ed6fS1iNn5r8aYk",
+  "authDomain": "gen-lang-client-0720495597.firebaseapp.com",
+  "storageBucket": "gen-lang-client-0720495597.firebasestorage.app",
+  "messagingSenderId": "3955142674",
   "measurementId": "",
-  "oAuthClientId": "241172583906-8ts652qpt7pe1t4c0bdi3dem880ubdjq.apps.googleusercontent.com",
+  "oAuthClientId": "3955142674-ju64ell1klid2n8pkajku88817fakgss.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

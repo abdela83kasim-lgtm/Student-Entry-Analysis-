@@ -15,7 +15,7 @@ export const NewReportModal: React.FC<NewReportModalProps> = ({
   onCreate
 }) => {
   const [title, setTitle] = useState('');
-  const [preparedBy, setPreparedBy] = useState('Office of Institutional Research & Planning');
+  const [preparedBy, setPreparedBy] = useState('OFFICE OF THE VICE PRESIDENT FOR ACADEMIC AFFAIRS');
   const [template, setTemplate] = useState<'standard' | 'executive' | 'departmental' | 'blank'>('standard');
 
   if (!isOpen) return null;
@@ -51,7 +51,7 @@ export const NewReportModal: React.FC<NewReportModalProps> = ({
 
     onCreate({
       name: finalTitle,
-      preparedBy: preparedBy.trim() || 'Institutional Research',
+      preparedBy: preparedBy.trim() || 'OFFICE OF THE VICE PRESIDENT FOR ACADEMIC AFFAIRS',
       institution: 'Oromia State University',
       status: 'Draft',
       sections,
@@ -104,7 +104,7 @@ export const NewReportModal: React.FC<NewReportModalProps> = ({
               type="text"
               value={preparedBy}
               onChange={(e) => setPreparedBy(e.target.value)}
-              placeholder="e.g. Office of Institutional Research & Planning"
+              placeholder="e.g. OFFICE OF THE VICE PRESIDENT FOR ACADEMIC AFFAIRS"
               className="w-full px-3 py-2 border border-[#BFCDC8] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E0A526]"
             />
           </div>

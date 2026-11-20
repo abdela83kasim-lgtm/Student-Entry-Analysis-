@@ -1,9 +1,10 @@
-import React from 'react';
-import { ReportDocument, UserAccount } from '../types';
+import React, { useState } from 'react';
+import { ReportDocument, UserAccount, parseProgramLevelScopes } from '../types';
 import {
   AnalyticsResult,
   formatNum,
-  formatPct
+  formatPct,
+  resolveDynamicReportTitle
 } from '../data/analytics';
 import { YearlyStackedChart, GenderShareChart } from './Charts';
 import { Plus, Trash2, Edit3, CheckCircle2, ShieldCheck } from 'lucide-react';
@@ -34,6 +35,14 @@ export const ReportPaper: React.FC<ReportPaperProps> = ({
   onOpenDataLedger
 }) => {
   const years = analytics.years;
+  const firstYear = years[0] ?? 2014;
+  const latestYear = analytics.latestYear ?? years[years.length - 1] ?? 2018;
+  const latestIdx = Math.max(0, years.length - 1);
+  const prevYear = years[Math.max(0, latestIdx - 1)] ?? latestYear;
+  const displayTitle = resolveDynamicReportTitle(report.name, years);
+  const [selectedGenderYear, setSelectedGenderYear] = useState<number | 'ALL'>('ALL');
+  const activeGenderYear: number | 'ALL' =
+    selectedGenderYear !== 'ALL' && years.includes(selectedGenderYear) ? selectedGenderYear : 'ALL';
 
   const isSectionActive = (id: string) => {
     const sec = report.sections.find((s) => s.id === id);
@@ -77,13 +86,23 @@ export const ReportPaper: React.FC<ReportPaperProps> = ({
       aria-label="Institutional Report Paper"
     >
       {/* Official Institutional Document Header */}
-      <header className="bg-[#0F4C3A] text-white p-8 sm:p-12 border-b-6 border-[#E0A526] page-break-avoid">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-          <div className="text-xs uppercase tracking-widest text-[#A9D3C2] font-semibold flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-[#E0A526]" />
-            <span>{report.institution || 'Oromia State University'}</span>
-            <span>·</span>
-            <span>Official Report</span>
+      <header className="report-letterhead bg-[#0F4C3A] text-white p-8 sm:p-12 border-b-6 border-[#E0A526] page-break-avoid">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
+          <div className="flex items-center gap-3.5">
+            <img
+              src="/assets/aistudio/Forest_Green_Radiant_Shield_Emblem_7f18a355.png"
+              alt="Oromia State University Logo"
+              className="w-12 h-12 sm:w-14 sm:h-14 object-contain shrink-0 drop-shadow-sm bg-white/10 rounded-xl p-1 border border-white/20"
+            />
+            <div>
+              <div className="text-xs uppercase tracking-widest text-[#A9D3C2] font-semibold flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-[#E0A526]" />
+                <span>{report.institution || 'Oromia State University'}</span>
+              </div>
+              <span className="text-[11px] text-[#CFE6DC] tracking-wide block mt-0.5">
+                Official Institutional Admissions & Statistical Report
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-2 text-xs">
             <span className="bg-white/10 px-2.5 py-1 rounded text-[#E2EFE9] font-medium border border-white/15">
@@ -95,14 +114,14 @@ export const ReportPaper: React.FC<ReportPaperProps> = ({
         {isEditing ? (
           <input
             type="text"
-            value={report.name}
+            value={displayTitle}
             onChange={handleTitleChange}
             className="w-full text-2xl sm:text-4xl font-serif font-bold text-white bg-black/20 border border-white/30 rounded px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#E0A526] mb-3"
             placeholder="Report Document Title"
           />
         ) : (
           <h1 className="text-2xl sm:text-4xl font-serif font-bold text-white tracking-tight leading-tight mb-3">
-            {report.name}
+            {displayTitle}
           </h1>
         )}
 
@@ -137,7 +156,7 @@ export const ReportPaper: React.FC<ReportPaperProps> = ({
       </header>
 
       {/* Program-Level Data Isolation Banner */}
-      {currentUserAccount && currentUserAccount.programLevelScope !== 'ALL' && (
+      {currentUserAccount && parseProgramLevelScopes(currentUserAccount.programLevelScope).length > 0 && (
         <div className="bg-[#EFF6F3] border-b border-[#D0E2D9] px-6 sm:px-12 py-3 flex flex-wrap items-center justify-between gap-3 text-xs text-[#0F4C3A] page-break-avoid">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-[#1F7A5C] animate-pulse shrink-0" />
@@ -164,16 +183,16 @@ export const ReportPaper: React.FC<ReportPaperProps> = ({
                   {formatNum(analytics.totalAllYears)}
                 </span>
                 <span className="text-xs text-[#5B6B70] block mt-0.5">
-                  Total Entrants (2014–2018)
+                  Total Entrants ({firstYear}–{latestYear})
                 </span>
               </div>
 
               <div className="p-2 border-l-3 border-[#0F4C3A] pl-3">
                 <span className="block text-2xl font-serif font-bold text-[#0F4C3A] tabular-nums">
-                  {formatNum(analytics.totalByYear[4])}
+                  {formatNum(analytics.totalByYear[latestIdx])}
                 </span>
                 <span className="text-xs text-[#5B6B70] block mt-0.5">
-                  Entrants in 2018
+                  Entrants in {latestYear}
                 </span>
               </div>
 
@@ -182,7 +201,7 @@ export const ReportPaper: React.FC<ReportPaperProps> = ({
                   {formatPct(analytics.totalGrowth2018, true)}
                 </span>
                 <span className="text-xs text-[#5B6B70] block mt-0.5">
-                  2018 vs 2017 (All Programs)
+                  {latestYear} vs {prevYear} (All Programs)
                 </span>
               </div>
 
@@ -191,16 +210,16 @@ export const ReportPaper: React.FC<ReportPaperProps> = ({
                   {formatPct(analytics.likeForLikeGrowth2018, true)}
                 </span>
                 <span className="text-xs text-[#5B6B70] block mt-0.5">
-                  Like-for-like Growth (Excl. New 2018 Programs)
+                  Like-for-like Growth (Excl. Diploma &amp; Education)
                 </span>
               </div>
 
               <div className="p-2 border-l-3 border-[#B8456B] pl-3">
                 <span className="block text-2xl font-serif font-bold text-[#B8456B] tabular-nums">
-                  {formatPct(analytics.femaleShareByYear[4])}
+                  {formatPct(analytics.femaleShareByYear[latestIdx])}
                 </span>
                 <span className="text-xs text-[#5B6B70] block mt-0.5">
-                  2018 Overall Female Share
+                  {latestYear} Overall Female Share
                 </span>
               </div>
 
@@ -209,7 +228,7 @@ export const ReportPaper: React.FC<ReportPaperProps> = ({
                   {formatPct(analytics.femaleShareByYear[0])}
                 </span>
                 <span className="text-xs text-[#5B6B70] block mt-0.5">
-                  2014 Baseline Female Share
+                  {firstYear} Baseline Female Share
                 </span>
               </div>
 
@@ -218,7 +237,7 @@ export const ReportPaper: React.FC<ReportPaperProps> = ({
                   {formatPct(analytics.femaleShare2018ExDiploma)}
                 </span>
                 <span className="text-xs text-[#5B6B70] block mt-0.5">
-                  2018 Degree Female Share (Excl. Summer Teacher Diploma/Cert)
+                  {latestYear} Degree Female Share (Excl. Summer Teacher Diploma/Cert)
                 </span>
               </div>
             </div>
@@ -327,7 +346,7 @@ export const ReportPaper: React.FC<ReportPaperProps> = ({
                 Like-for-Like Normalized Analysis
               </h3>
               <p className="text-xs text-[#5B6B70] mb-3">
-                Excludes Summer Teacher Diploma, Certificate, and BED Education tracks (which only appear in 2018) to allow normalized longitudinal comparisons.
+                Excludes Summer Teacher Diploma, Certificate, and BED Education tracks to allow normalized longitudinal comparisons.
               </p>
               <div className="overflow-x-auto border border-[#D5E2DC] rounded-lg">
                 <table className="w-full text-xs sm:text-sm border-collapse text-left">
@@ -335,7 +354,7 @@ export const ReportPaper: React.FC<ReportPaperProps> = ({
                     <tr className="bg-[#2B6050] text-white">
                       <th className="py-2 px-3 font-semibold">Entry Year</th>
                       <th className="py-2 px-3 font-semibold text-right">Total (All Programs)</th>
-                      <th className="py-2 px-3 font-semibold text-right">New 2018 Additions</th>
+                      <th className="py-2 px-3 font-semibold text-right">Diploma &amp; Education Additions</th>
                       <th className="py-2 px-3 font-semibold text-right">Total (Like-for-Like)</th>
                       <th className="py-2 px-3 font-semibold text-right">Normalized YoY</th>
                     </tr>
@@ -470,98 +489,250 @@ export const ReportPaper: React.FC<ReportPaperProps> = ({
         )}
 
         {/* Section 5: Gender Equity & Demographics */}
-        {isSectionActive('gender') && (
-          <section className="page-break-avoid">
-            <h2 className="text-xl sm:text-2xl font-serif font-bold text-[#0F4C3A] mb-2">
-              Gender Equity & Participation Analysis
-            </h2>
-            <p className="text-xs sm:text-sm text-[#5B6B70] mb-3">
-              Institutional gender parity metrics: Female % = Female ÷ (Male + Female).
-            </p>
+        {isSectionActive('gender') && (() => {
+          const selectedYearData =
+            activeGenderYear !== 'ALL'
+              ? analytics.genderByLevelByYear.find((entry) => entry.year === activeGenderYear) || null
+              : null;
 
-            <GenderShareChart analytics={analytics} />
+          const activeGenderRows = selectedYearData
+            ? selectedYearData.levels.map((l) => ({
+                level: l.level,
+                male: l.male,
+                female: l.female,
+                total: l.total,
+                femalePct: l.femalePct,
+                share: l.shareOfYear
+              }))
+            : analytics.genderByLevelAllYears.map((l) => ({
+                level: l.level,
+                male: l.male,
+                female: l.female,
+                total: l.total,
+                femalePct: l.femalePct,
+                share: l.shareOfAllYears
+              }));
 
-            <div className="space-y-6 mt-4">
-              <div>
-                <h3 className="text-sm font-semibold text-[#1F4C3B] mb-2">
-                  2018 Entrants Gender Breakdown by Program Level
-                </h3>
-                <div className="overflow-x-auto border border-[#D5E2DC] rounded-lg">
-                  <table className="w-full text-xs sm:text-sm border-collapse text-left">
-                    <thead>
-                      <tr className="bg-[#1F7A5C] text-white">
-                        <th className="py-2 px-3 font-semibold">Program Level</th>
-                        <th className="py-2 px-3 font-semibold text-right">Male</th>
-                        <th className="py-2 px-3 font-semibold text-right">Female</th>
-                        <th className="py-2 px-3 font-semibold text-right">Total</th>
-                        <th className="py-2 px-3 font-semibold text-right">Female %</th>
-                        <th className="py-2 px-3 font-semibold text-right">Share of 2018</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#E3ECE7]">
-                      {analytics.genderByLevel2018.map((row) => (
-                        <tr key={row.level} className="hover:bg-[#F7FAF8]">
-                          <td className="py-2 px-3 font-medium text-[#1A2E26]">{row.level}</td>
-                          <td className="py-2 px-3 text-right tabular-nums text-[#33463F]">{formatNum(row.male)}</td>
-                          <td className="py-2 px-3 text-right tabular-nums text-[#33463F]">{formatNum(row.female)}</td>
-                          <td className="py-2 px-3 text-right tabular-nums font-semibold text-[#0F4C3A]">{formatNum(row.total)}</td>
-                          <td className="py-2 px-3 text-right tabular-nums text-[#8D4258] font-bold">{formatPct(row.femalePct)}</td>
-                          <td className="py-2 px-3 text-right tabular-nums text-[#5B6B70]">{formatPct(row.shareOf2018)}</td>
-                        </tr>
-                      ))}
-                      <tr className="bg-[#EFF5F2] font-bold border-t-2 border-[#0F4C3A]">
-                        <td className="py-2 px-3 text-[#0F4C3A]">Total (2018)</td>
-                        <td className="py-2 px-3 text-right tabular-nums">{formatNum(analytics.maleByYear[4])}</td>
-                        <td className="py-2 px-3 text-right tabular-nums">{formatNum(analytics.femaleByYear[4])}</td>
-                        <td className="py-2 px-3 text-right tabular-nums text-[#0F4C3A]">{formatNum(analytics.totalByYear[4])}</td>
-                        <td className="py-2 px-3 text-right tabular-nums text-[#8D4258] font-bold">{formatPct(analytics.femaleShareByYear[4])}</td>
-                        <td className="py-2 px-3 text-right tabular-nums">100.0%</td>
-                      </tr>
-                    </tbody>
-                  </table>
+          const activeSummaryTotals = selectedYearData
+            ? {
+                label: String(selectedYearData.year),
+                male: selectedYearData.maleTotal,
+                female: selectedYearData.femaleTotal,
+                total: selectedYearData.total,
+                femalePct: selectedYearData.femalePct
+              }
+            : {
+                label: `All Years (${firstYear}–${latestYear})`,
+                male: analytics.totalMaleAllYears,
+                female: analytics.totalFemaleAllYears,
+                total: analytics.totalAllYears,
+                femalePct: analytics.overallFemaleShare
+              };
+
+          return (
+            <section className="page-break-avoid">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-serif font-bold text-[#0F4C3A]">
+                    Gender Equity & Participation Analysis
+                  </h2>
+                  <p className="text-xs sm:text-sm text-[#5B6B70] mt-1">
+                    Institutional gender parity metrics across all academic years ({firstYear}–{latestYear}): Female % = Female ÷ (Male + Female).
+                  </p>
+                </div>
+
+                {/* Dynamic Year Filter Chips (Automatically adds new years) */}
+                <div className="flex flex-wrap items-center gap-1.5 no-print">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGenderYear('ALL')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                      activeGenderYear === 'ALL'
+                        ? 'bg-[#0F4C3A] text-white border-[#0F4C3A]'
+                        : 'bg-white text-[#0F4C3A] border-[#C5D8CF] hover:bg-[#EFF5F2]'
+                    }`}
+                  >
+                    All Years ({firstYear}–{latestYear})
+                  </button>
+                  {years.map((yr) => (
+                    <button
+                      key={yr}
+                      type="button"
+                      onClick={() => setSelectedGenderYear(yr)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold border transition-colors cursor-pointer ${
+                        activeGenderYear === yr
+                          ? 'bg-[#0F4C3A] text-white border-[#0F4C3A]'
+                          : 'bg-white text-[#0F4C3A] border-[#C5D8CF] hover:bg-[#EFF5F2]'
+                      }`}
+                    >
+                      {yr}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <div>
-                <h3 className="text-sm font-semibold text-[#1F4C3B] mb-2">
-                  Multi-Year Female Representation Trend by Program Level
-                </h3>
-                <div className="overflow-x-auto border border-[#D5E2DC] rounded-lg">
-                  <table className="w-full text-xs sm:text-sm border-collapse text-left">
-                    <thead>
-                      <tr className="bg-[#2B6050] text-white">
-                        <th className="py-2 px-3 font-semibold">Program Level</th>
-                        {years.map((y) => (
-                          <th key={y} className="py-2 px-3 font-semibold text-right">{y}</th>
+              <GenderShareChart analytics={analytics} selectedYear={activeGenderYear} />
+
+              <div className="space-y-6 mt-4">
+                {/* Summary Gender Breakdown by Program Level (All Years by default, or Selected Year) */}
+                <div>
+                  <h3 className="text-sm font-semibold text-[#1F4C3B] mb-2">
+                    {activeSummaryTotals.label} Entrants Gender Breakdown by Program Level
+                  </h3>
+                  <div className="overflow-x-auto border border-[#D5E2DC] rounded-lg">
+                    <table className="w-full text-xs sm:text-sm border-collapse text-left">
+                      <thead>
+                        <tr className="bg-[#1F7A5C] text-white">
+                          <th className="py-2 px-3 font-semibold">Program Level</th>
+                          <th className="py-2 px-3 font-semibold text-right">Male</th>
+                          <th className="py-2 px-3 font-semibold text-right">Female</th>
+                          <th className="py-2 px-3 font-semibold text-right">Total</th>
+                          <th className="py-2 px-3 font-semibold text-right">Female %</th>
+                          <th className="py-2 px-3 font-semibold text-right">
+                            {selectedYearData ? `Share of ${selectedYearData.year}` : 'Share of All Years'}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E3ECE7]">
+                        {activeGenderRows.map((row) => (
+                          <tr key={row.level} className="hover:bg-[#F7FAF8]">
+                            <td className="py-2 px-3 font-medium text-[#1A2E26]">{row.level}</td>
+                            <td className="py-2 px-3 text-right tabular-nums text-[#33463F]">{formatNum(row.male)}</td>
+                            <td className="py-2 px-3 text-right tabular-nums text-[#33463F]">{formatNum(row.female)}</td>
+                            <td className="py-2 px-3 text-right tabular-nums font-semibold text-[#0F4C3A]">{formatNum(row.total)}</td>
+                            <td className="py-2 px-3 text-right tabular-nums text-[#8D4258] font-bold">{formatPct(row.femalePct)}</td>
+                            <td className="py-2 px-3 text-right tabular-nums text-[#5B6B70]">{formatPct(row.share)}</td>
+                          </tr>
                         ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#E3ECE7]">
-                      {analytics.genderTrendByLevel.map((row) => (
-                        <tr key={row.level} className="hover:bg-[#F7FAF8]">
-                          <td className="py-2 px-3 font-medium text-[#1A2E26]">{row.level}</td>
-                          {row.femalePctByYear.map((val, idx) => (
-                            <td key={years[idx]} className="py-2 px-3 text-right tabular-nums text-[#8D4258]">
+                        <tr className="bg-[#EFF5F2] font-bold border-t-2 border-[#0F4C3A]">
+                          <td className="py-2 px-3 text-[#0F4C3A]">Total ({activeSummaryTotals.label})</td>
+                          <td className="py-2 px-3 text-right tabular-nums">{formatNum(activeSummaryTotals.male)}</td>
+                          <td className="py-2 px-3 text-right tabular-nums">{formatNum(activeSummaryTotals.female)}</td>
+                          <td className="py-2 px-3 text-right tabular-nums text-[#0F4C3A]">{formatNum(activeSummaryTotals.total)}</td>
+                          <td className="py-2 px-3 text-right tabular-nums text-[#8D4258] font-bold">{formatPct(activeSummaryTotals.femalePct)}</td>
+                          <td className="py-2 px-3 text-right tabular-nums">100.0%</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Year-by-Year Entrants Gender Breakdown by Program Level (All Academic Years) */}
+                <div>
+                  <h3 className="text-sm font-semibold text-[#1F4C3B] mb-1">
+                    Year-by-Year Entrants Gender Breakdown by Program Level ({firstYear}–{latestYear})
+                  </h3>
+                  <p className="text-xs text-[#5B6B70] mb-2">
+                    Complete Male, Female, Total, and Female % breakdown for every academic year — any newly added year appears automatically.
+                  </p>
+                  <div className="report-scroll-table overflow-x-auto border border-[#D5E2DC] rounded-lg max-h-[460px] print:max-h-none print:overflow-visible">
+                    <table className="w-full text-xs sm:text-sm border-collapse text-left">
+                      <thead className="sticky top-0 z-10">
+                        <tr className="bg-[#1F7A5C] text-white">
+                          <th className="py-2 px-3 font-semibold">Year</th>
+                          <th className="py-2 px-3 font-semibold">Program Level</th>
+                          <th className="py-2 px-3 font-semibold text-right">Male</th>
+                          <th className="py-2 px-3 font-semibold text-right">Female</th>
+                          <th className="py-2 px-3 font-semibold text-right">Total</th>
+                          <th className="py-2 px-3 font-semibold text-right">Female %</th>
+                          <th className="py-2 px-3 font-semibold text-right">Share of Year</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E3ECE7]">
+                        {analytics.genderByLevelByYear.map((yrGroup) => {
+                          const visibleLevels = yrGroup.levels.filter((l) => l.total > 0);
+                          return (
+                            <React.Fragment key={yrGroup.year}>
+                              {visibleLevels.length === 0 ? (
+                                <tr className="hover:bg-[#F7FAF8]">
+                                  <td className="py-2 px-3 font-mono font-bold text-[#0F4C3A]">{yrGroup.year}</td>
+                                  <td className="py-2 px-3 italic text-[#6A8077]" colSpan={6}>
+                                    No approved entrants recorded for {yrGroup.year}
+                                  </td>
+                                </tr>
+                              ) : (
+                                visibleLevels.map((lvlRow, idx) => (
+                                  <tr key={`${yrGroup.year}-${lvlRow.level}`} className="hover:bg-[#F7FAF8]">
+                                    <td className="py-1.5 px-3 font-mono font-semibold text-[#1A2E26]">
+                                      {idx === 0 ? yrGroup.year : ''}
+                                    </td>
+                                    <td className="py-1.5 px-3 text-[#283832]">{lvlRow.level}</td>
+                                    <td className="py-1.5 px-3 text-right tabular-nums text-[#33463F]">{formatNum(lvlRow.male)}</td>
+                                    <td className="py-1.5 px-3 text-right tabular-nums text-[#33463F]">{formatNum(lvlRow.female)}</td>
+                                    <td className="py-1.5 px-3 text-right tabular-nums font-medium text-[#0F4C3A]">{formatNum(lvlRow.total)}</td>
+                                    <td className="py-1.5 px-3 text-right tabular-nums text-[#8D4258] font-semibold">{formatPct(lvlRow.femalePct)}</td>
+                                    <td className="py-1.5 px-3 text-right tabular-nums text-[#5B6B70]">{formatPct(lvlRow.shareOfYear)}</td>
+                                  </tr>
+                                ))
+                              )}
+                              <tr className="bg-[#F4F8F6] font-semibold border-b border-[#C5D8CF]">
+                                <td className="py-1.5 px-3 font-mono text-[#0F4C3A]">{yrGroup.year}</td>
+                                <td className="py-1.5 px-3 text-[#0F4C3A]">{yrGroup.year} Subtotal</td>
+                                <td className="py-1.5 px-3 text-right tabular-nums">{formatNum(yrGroup.maleTotal)}</td>
+                                <td className="py-1.5 px-3 text-right tabular-nums">{formatNum(yrGroup.femaleTotal)}</td>
+                                <td className="py-1.5 px-3 text-right tabular-nums text-[#0F4C3A]">{formatNum(yrGroup.total)}</td>
+                                <td className="py-1.5 px-3 text-right tabular-nums text-[#8D4258]">{formatPct(yrGroup.femalePct)}</td>
+                                <td className="py-1.5 px-3 text-right tabular-nums">100.0%</td>
+                              </tr>
+                            </React.Fragment>
+                          );
+                        })}
+                        <tr className="bg-[#EFF5F2] font-bold border-t-2 border-[#0F4C3A] sticky bottom-0">
+                          <td className="py-2.5 px-3 text-[#0F4C3A]" colSpan={2}>
+                            All Years Grand Total ({firstYear}–{latestYear})
+                          </td>
+                          <td className="py-2.5 px-3 text-right tabular-nums">{formatNum(analytics.totalMaleAllYears)}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums">{formatNum(analytics.totalFemaleAllYears)}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums text-[#0F4C3A]">{formatNum(analytics.totalAllYears)}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums text-[#8D4258] font-bold">{formatPct(analytics.overallFemaleShare)}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums">100.0%</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-semibold text-[#1F4C3B] mb-2">
+                    Multi-Year Female Representation Trend by Program Level
+                  </h3>
+                  <div className="overflow-x-auto border border-[#D5E2DC] rounded-lg">
+                    <table className="w-full text-xs sm:text-sm border-collapse text-left">
+                      <thead>
+                        <tr className="bg-[#2B6050] text-white">
+                          <th className="py-2 px-3 font-semibold">Program Level</th>
+                          {years.map((y) => (
+                            <th key={y} className="py-2 px-3 font-semibold text-right">{y}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E3ECE7]">
+                        {analytics.genderTrendByLevel.map((row) => (
+                          <tr key={row.level} className="hover:bg-[#F7FAF8]">
+                            <td className="py-2 px-3 font-medium text-[#1A2E26]">{row.level}</td>
+                            {row.femalePctByYear.map((val, idx) => (
+                              <td key={years[idx]} className="py-2 px-3 text-right tabular-nums text-[#8D4258]">
+                                {formatPct(val)}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                        <tr className="bg-[#EFF5F2] font-bold border-t border-[#0F4C3A]">
+                          <td className="py-2 px-3 text-[#0F4C3A]">All University Programs</td>
+                          {analytics.femaleShareByYear.map((val, idx) => (
+                            <td key={years[idx]} className="py-2 px-3 text-right tabular-nums text-[#8D4258] font-bold">
                               {formatPct(val)}
                             </td>
                           ))}
                         </tr>
-                      ))}
-                      <tr className="bg-[#EFF5F2] font-bold border-t border-[#0F4C3A]">
-                        <td className="py-2 px-3 text-[#0F4C3A]">All University Programs</td>
-                        {analytics.femaleShareByYear.map((val, idx) => (
-                          <td key={years[idx]} className="py-2 px-3 text-right tabular-nums text-[#8D4258] font-bold">
-                            {formatPct(val)}
-                          </td>
-                        ))}
-                      </tr>
-                    </tbody>
-                  </table>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
-          </section>
-        )}
+            </section>
+          );
+        })()}
 
         {/* Section 6: Department List Ledger */}
         {isSectionActive('departments') && (
@@ -581,7 +752,7 @@ export const ReportPaper: React.FC<ReportPaperProps> = ({
               All {analytics.departments.length} department programs calculated directly from validated registrar records.
             </p>
 
-            <div className="overflow-x-auto border border-[#D5E2DC] rounded-lg max-h-[500px]">
+            <div className="report-scroll-table overflow-x-auto border border-[#D5E2DC] rounded-lg max-h-[500px] print:max-h-none print:overflow-visible">
               <table className="w-full text-xs sm:text-sm border-collapse text-left">
                 <thead className="sticky top-0 z-10">
                   <tr className="bg-[#1F7A5C] text-white">
@@ -826,7 +997,7 @@ export const ReportPaper: React.FC<ReportPaperProps> = ({
               </p>
               <div className="border-t border-[#8FA89E] pt-1">
                 <p className="font-medium text-[#183127]">{report.preparedBy}</p>
-                <p>Institutional Research Division</p>
+                <p>Oromia State University</p>
               </div>
             </div>
 
@@ -854,7 +1025,12 @@ export const ReportPaper: React.FC<ReportPaperProps> = ({
       </div>
 
       {/* Report Footer */}
-      <footer className="bg-[#FAFDFB] border-t border-[#D5E2DC] px-8 py-4 text-xs text-[#6B8077] flex items-center justify-center">
+      <footer className="bg-[#FAFDFB] border-t border-[#D5E2DC] px-8 py-4 text-xs text-[#6B8077] flex items-center justify-center gap-2.5">
+        <img
+          src="/assets/aistudio/Forest_Green_Radiant_Shield_Emblem_7f18a355.png"
+          alt="Oromia State University Logo"
+          className="w-5 h-5 object-contain shrink-0"
+        />
         <span>© Oromia State University | Copyright by Abdela Kasim</span>
       </footer>
     </article>

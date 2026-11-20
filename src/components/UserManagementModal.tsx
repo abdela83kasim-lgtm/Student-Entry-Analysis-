@@ -1,5 +1,17 @@
 import React, { useState } from 'react';
-import { UserAccount, UserRole, DepartmentOfferStatus, RawRecord, generateDefaultSecurePassword } from '../types';
+import {
+  UserAccount,
+  UserRole,
+  DepartmentOfferStatus,
+  RawRecord,
+  generateDefaultSecurePassword,
+  parseAssignedDepartments,
+  serializeAssignedDepartments,
+  matchesAssignedDepartment,
+  parseProgramLevelScopes,
+  serializeProgramLevelScopes,
+  matchesProgramLevelScope
+} from '../types';
 import { PROGRAM_LEVELS } from '../data/analytics';
 import {
   X,
@@ -28,7 +40,9 @@ import {
   RotateCcw,
   Copy,
   Lock,
-  RefreshCw
+  RefreshCw,
+  Mail,
+  Phone
 } from 'lucide-react';
 
 interface UserManagementModalProps {
@@ -48,6 +62,8 @@ const getRoleIcon = (role: string) => {
   switch (role) {
     case 'registrar':
       return <GraduationCap className="w-5 h-5 text-[#E0A526]" />;
+    case 'all_viewer':
+      return <Eye className="w-5 h-5 text-cyan-200" />;
     case 'department_officer':
       return <Briefcase className="w-5 h-5 text-emerald-300" />;
     case 'program_applied':
@@ -98,9 +114,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   // Form fields for adding/editing user
   const [formUsername, setFormUsername] = useState('');
   const [formName, setFormName] = useState('');
-  const [formProgramScope, setFormProgramScope] = useState<string>(PROGRAM_LEVELS[0]);
-  const [formDepartment, setFormDepartment] = useState<string>('ALL');
-  const [isCustomDept, setIsCustomDept] = useState(false);
+  const [formProgramMode, setFormProgramMode] = useState<'ALL' | 'SPECIFIC'>('ALL');
+  const [formSelectedPrograms, setFormSelectedPrograms] = useState<string[]>([]);
+  const [customProgramInput, setCustomProgramInput] = useState('');
+  const [formDeptMode, setFormDeptMode] = useState<'ALL' | 'SPECIFIC'>('SPECIFIC');
+  const [formSelectedDepts, setFormSelectedDepts] = useState<string[]>([]);
+  const [deptSearchQuery, setDeptSearchQuery] = useState('');
   const [customDeptInput, setCustomDeptInput] = useState('');
   const [formOfferStatus, setFormOfferStatus] = useState<DepartmentOfferStatus>('offered');
   const [formIsActive, setFormIsActive] = useState<boolean>(true);
@@ -109,6 +128,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [formPassword, setFormPassword] = useState(() => generateDefaultSecurePassword());
   const [formShowPassword, setFormShowPassword] = useState(false);
   const [formDescription, setFormDescription] = useState('');
+  const [formRecoveryEmail, setFormRecoveryEmail] = useState('');
+  const [formRecoveryPhone, setFormRecoveryPhone] = useState('');
   const [error, setError] = useState('');
 
   // Password visibility and action notices for admin
@@ -116,19 +137,72 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [copiedUsername, setCopiedUsername] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
 
-  // Combined unique departments list
+  // Combined unique program levels (standard + any custom selected levels)
+  const allProgramLevels = Array.from(
+    new Set([
+      ...PROGRAM_LEVELS,
+      ...formSelectedPrograms.filter(Boolean)
+    ])
+  );
+
+  // Combined unique departments list (includes defaults, ledger depts, and currently selected custom depts)
   const allDepartments = Array.from(
-    new Set([...DEFAULT_DEPARTMENTS, ...existingDepartments.filter(Boolean)])
-  ).sort();
+    new Set([
+      ...DEFAULT_DEPARTMENTS,
+      ...existingDepartments.filter(Boolean),
+      ...formSelectedDepts.filter(Boolean)
+    ])
+  ).sort((a, b) => a.localeCompare(b));
+
+  const filteredDepartmentOptions = allDepartments.filter((dept) =>
+    dept.toLowerCase().includes(deptSearchQuery.trim().toLowerCase())
+  );
 
   if (!isOpen) return null;
+
+  if (currentUserAccount.role !== 'admin') {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-[#16221F] text-[#17262B] dark:text-[#E7EFEC] rounded-2xl max-w-md w-full p-6 shadow-2xl border border-amber-300 dark:border-amber-800 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 rounded-xl shrink-0">
+              <Lock className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-lg font-serif font-bold text-[#0F4C3A] dark:text-[#A9D3C2]">
+                Administrator Access Required
+              </h2>
+              <p className="text-xs text-[#5B6B70] dark:text-[#9DB0AA]">
+                Restricted security control
+              </p>
+            </div>
+          </div>
+          <p className="text-xs leading-relaxed text-[#324840] dark:text-[#CFE6DC] bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg border border-amber-200 dark:border-amber-900/50">
+            Only the University Administrator can view user accounts, add new users, edit roles/passwords, or switch accounts.
+          </p>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-[#0F4C3A] hover:bg-[#1A5C49] text-white rounded-lg text-xs font-semibold cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const resetForm = () => {
     setFormUsername('');
     setFormName('');
-    setFormProgramScope(PROGRAM_LEVELS[0]);
-    setFormDepartment('ALL');
-    setIsCustomDept(false);
+    setFormProgramMode('ALL');
+    setFormSelectedPrograms([]);
+    setCustomProgramInput('');
+    setFormDeptMode('ALL');
+    setFormSelectedDepts([]);
+    setDeptSearchQuery('');
     setCustomDeptInput('');
     setFormOfferStatus('offered');
     setFormIsActive(true);
@@ -137,6 +211,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     setFormPassword(generateDefaultSecurePassword());
     setFormShowPassword(false);
     setFormDescription('');
+    setFormRecoveryEmail('');
+    setFormRecoveryPhone('');
     setError('');
     setShowAddForm(false);
     setEditingUsername(null);
@@ -146,18 +222,27 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     setEditingUsername(user.username);
     setFormUsername(user.username);
     setFormName(user.name);
-    setFormProgramScope(user.programLevelScope);
 
-    const userDept = user.assignedDepartment || 'ALL';
-    if (userDept === 'ALL' || allDepartments.includes(userDept)) {
-      setFormDepartment(userDept);
-      setIsCustomDept(false);
-      setCustomDeptInput('');
+    const parsedPrograms = parseProgramLevelScopes(user.programLevelScope);
+    if (parsedPrograms.length === 0) {
+      setFormProgramMode('ALL');
+      setFormSelectedPrograms([]);
     } else {
-      setFormDepartment('CUSTOM');
-      setIsCustomDept(true);
-      setCustomDeptInput(userDept);
+      setFormProgramMode('SPECIFIC');
+      setFormSelectedPrograms(parsedPrograms);
     }
+    setCustomProgramInput('');
+
+    const parsedDepts = parseAssignedDepartments(user.assignedDepartment);
+    if (parsedDepts.length === 0) {
+      setFormDeptMode('ALL');
+      setFormSelectedDepts([]);
+    } else {
+      setFormDeptMode('SPECIFIC');
+      setFormSelectedDepts(parsedDepts);
+    }
+    setDeptSearchQuery('');
+    setCustomDeptInput('');
 
     setFormOfferStatus(user.departmentOfferStatus || 'assigned');
     setFormIsActive(user.isActive !== false);
@@ -165,8 +250,70 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     setFormRoleTitle(user.roleTitle);
     setFormPassword(user.password || '1');
     setFormDescription(user.description);
+    setFormRecoveryEmail(user.username === 'admin' ? user.recoveryEmail || '' : '');
+    setFormRecoveryPhone(user.username === 'admin' ? user.recoveryPhone || '' : '');
     setShowAddForm(true);
     setError('');
+  };
+
+  const toggleProgramSelection = (lvlName: string) => {
+    setFormProgramMode('SPECIFIC');
+    setFormSelectedPrograms((prev) => {
+      const exists = prev.some((p) => p.toLowerCase() === lvlName.toLowerCase());
+      if (exists) {
+        return prev.filter((p) => p.toLowerCase() !== lvlName.toLowerCase());
+      }
+      return [...prev, lvlName];
+    });
+  };
+
+  const handleAddCustomProgram = () => {
+    const clean = customProgramInput
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0 && s.toUpperCase() !== 'ALL');
+    if (clean.length === 0) return;
+    setFormProgramMode('SPECIFIC');
+    setFormSelectedPrograms((prev) => {
+      const next = [...prev];
+      for (const item of clean) {
+        if (!next.some((p) => p.toLowerCase() === item.toLowerCase())) {
+          next.push(item);
+        }
+      }
+      return next;
+    });
+    setCustomProgramInput('');
+  };
+
+  const toggleDepartmentSelection = (deptName: string) => {
+    setFormDeptMode('SPECIFIC');
+    setFormSelectedDepts((prev) => {
+      const exists = prev.some((d) => d.toLowerCase() === deptName.toLowerCase());
+      if (exists) {
+        return prev.filter((d) => d.toLowerCase() !== deptName.toLowerCase());
+      }
+      return [...prev, deptName];
+    });
+  };
+
+  const handleAddCustomDepartment = () => {
+    const clean = customDeptInput
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0 && s.toUpperCase() !== 'ALL');
+    if (clean.length === 0) return;
+    setFormDeptMode('SPECIFIC');
+    setFormSelectedDepts((prev) => {
+      const next = [...prev];
+      for (const item of clean) {
+        if (!next.some((d) => d.toLowerCase() === item.toLowerCase())) {
+          next.push(item);
+        }
+      }
+      return next;
+    });
+    setCustomDeptInput('');
   };
 
   const handleSaveUser = (e: React.FormEvent) => {
@@ -186,72 +333,145 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       return;
     }
 
-    const finalDepartment = isCustomDept
-      ? customDeptInput.trim()
-      : formDepartment === 'CUSTOM'
-      ? customDeptInput.trim()
-      : formDepartment;
-
-    if (!finalDepartment) {
-      setError('Please choose or enter an assigned department.');
+    const isEditingSoleAdmin = editingUsername === 'admin';
+    if (isEditingSoleAdmin) {
+      const cleanEmail = formRecoveryEmail.trim().toLowerCase();
+      const cleanPhone = formRecoveryPhone.trim();
+      if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        setError('Please enter a valid Admin recovery email address.');
+        return;
+      }
+      if (cleanEmail.length > 150) {
+        setError('Admin recovery email must be 150 characters or fewer.');
+        return;
+      }
+      if (cleanPhone && cleanPhone.replace(/\D/g, '').length < 7) {
+        setError('Please enter a valid Admin recovery phone number (at least 7 digits).');
+        return;
+      }
+      if (cleanPhone.length > 40) {
+        setError('Admin recovery phone number must be 40 characters or fewer.');
+        return;
+      }
+    }
+    if (!isEditingSoleAdmin && formProgramMode === 'SPECIFIC' && formSelectedPrograms.length === 0) {
+      setError('Please select at least one Program Level or choose "All Program Levels (ALL)".');
       return;
     }
+    if (!isEditingSoleAdmin && formDeptMode === 'SPECIFIC' && formSelectedDepts.length === 0) {
+      setError('Please select at least one department or choose "All Departments (ALL)".');
+      return;
+    }
+
+    const finalProgramScope =
+      isEditingSoleAdmin || formProgramMode === 'ALL'
+        ? 'ALL'
+        : serializeProgramLevelScopes(formSelectedPrograms);
+
+    if (finalProgramScope.length > 500) {
+      setError('Too many program levels selected for one user (exceeds 500-character limit).');
+      return;
+    }
+
+    const finalDepartment =
+      isEditingSoleAdmin || formDeptMode === 'ALL'
+        ? 'ALL'
+        : serializeAssignedDepartments(formSelectedDepts);
+
+    if (finalDepartment.length > 1000) {
+      setError('Too many departments selected for one user (exceeds 1000-character limit).');
+      return;
+    }
+
+    const effectiveProgramScope = isEditingSoleAdmin ? 'ALL' : finalProgramScope;
+    const effectiveDepartment = isEditingSoleAdmin ? 'ALL' : finalDepartment;
+    const assignedCount = parseAssignedDepartments(effectiveDepartment).length;
+    const programCount = parseProgramLevelScopes(effectiveProgramScope).length;
+    const selectedProgramList = parseProgramLevelScopes(effectiveProgramScope);
 
     let roleType: UserRole = 'program_applied';
     let avatarColor = '#1F7A5C';
 
-    if (finalDepartment !== 'ALL') {
-      roleType = 'department_officer';
-      avatarColor = '#047857';
-    } else if (formProgramScope === 'ALL') {
+    // Single Admin Policy: ONLY @admin can ever have role === 'admin'.
+    // Any other user assigned ALL Departments + ALL Program Levels gets 'all_viewer' (view all student list, cannot act as Admin).
+    if (isEditingSoleAdmin) {
       roleType = 'admin';
       avatarColor = '#B45309';
-    } else if (formProgramScope === '1st Degree (Applied)') {
+    } else if (effectiveDepartment !== 'ALL') {
+      roleType = 'department_officer';
+      avatarColor = '#047857';
+    } else if (effectiveProgramScope === 'ALL') {
+      roleType = 'all_viewer';
+      avatarColor = '#0E7490';
+    } else if (selectedProgramList.length === 1) {
+      const singleProg = selectedProgramList[0];
+      if (singleProg === '1st Degree (Applied)') {
+        roleType = 'program_applied';
+        avatarColor = '#1F7A5C';
+      } else if (singleProg === '1st Degree (Education)') {
+        roleType = 'program_education';
+        avatarColor = '#2F7F9E';
+      } else if (singleProg === 'Diploma and Certificate') {
+        roleType = 'program_diploma';
+        avatarColor = '#D97706';
+      } else if (singleProg === 'Masters') {
+        roleType = 'program_masters';
+        avatarColor = '#7C3AED';
+      } else if (singleProg === 'PhD') {
+        roleType = 'program_phd';
+        avatarColor = '#9333EA';
+      }
+    } else {
+      // Multi-program scope with ALL departments: keep non-admin scoped role so record filtering applies
       roleType = 'program_applied';
-      avatarColor = '#1F7A5C';
-    } else if (formProgramScope === '1st Degree (Education)') {
-      roleType = 'program_education';
-      avatarColor = '#2F7F9E';
-    } else if (formProgramScope === 'Diploma and Certificate') {
-      roleType = 'program_diploma';
-      avatarColor = '#D97706';
-    } else if (formProgramScope === 'Masters') {
-      roleType = 'program_masters';
-      avatarColor = '#7C3AED';
-    } else if (formProgramScope === 'PhD') {
-      roleType = 'program_phd';
-      avatarColor = '#9333EA';
+      avatarColor = '#0F766E';
     }
 
     const generatedRoleTitle =
       formRoleTitle.trim() ||
-      (finalDepartment !== 'ALL'
-        ? `${finalDepartment} Department Officer`
-        : formProgramScope === 'ALL'
+      (isEditingSoleAdmin
         ? 'University Executive Admin'
-        : `${formProgramScope} Officer`);
+        : effectiveDepartment !== 'ALL'
+        ? assignedCount > 1
+          ? `Multi-Department Officer (${assignedCount} Depts)`
+          : `${effectiveDepartment} Department Officer`
+        : effectiveProgramScope === 'ALL'
+        ? 'All-Student List Viewer (Non-Admin)'
+        : programCount > 1
+        ? `Multi-Program Officer (${programCount} Levels)`
+        : `${effectiveProgramScope} Officer`);
 
     const generatedDescription =
       formDescription.trim() ||
-      (finalDepartment !== 'ALL'
-        ? `Authorized to add and edit student admissions for Department of ${finalDepartment} (${formProgramScope}).`
-        : formProgramScope === 'ALL'
-        ? 'Full institutional authority over all university departments and records.'
-        : `Restricted access: Can only view and manage ${formProgramScope} data.`);
+      (isEditingSoleAdmin
+        ? 'Sole Administrator account: Full institutional authority, data entry approval, reports, and user management.'
+        : effectiveDepartment !== 'ALL'
+        ? `Authorized to submit new student admissions for ${
+            assignedCount > 1 ? `departments: ${effectiveDepartment}` : `Department of ${effectiveDepartment}`
+          } (${effectiveProgramScope}). Entries require Admin approval.`
+        : effectiveProgramScope === 'ALL'
+        ? 'Department Assignment Offering: Can view the full student list across all departments and years, and submit new entries for Admin approval. Cannot act as Admin.'
+        : `Restricted access: Can view ${effectiveProgramScope} data and submit new entries for Admin approval. Cannot act as Admin.`);
 
     const accountObj: UserAccount = {
       username: editingUsername || cleanUsername,
       name: formName.trim(),
       role: roleType,
       roleTitle: generatedRoleTitle,
-      programLevelScope: formProgramScope,
-      assignedDepartment: finalDepartment,
-      departmentOfferStatus: finalDepartment === 'ALL' ? 'assigned' : formOfferStatus,
-      isActive: formIsActive,
+      programLevelScope: effectiveProgramScope,
+      assignedDepartment: effectiveDepartment,
+      departmentOfferStatus: isEditingSoleAdmin ? 'assigned' : formOfferStatus,
+      isActive: isEditingSoleAdmin ? true : formIsActive,
       dataEntryCompleted: formDataEntryDone,
       description: generatedDescription,
       avatarColor,
-      password: formPassword.trim() || '1'
+      password: formPassword.trim() || '1',
+      ...(isEditingSoleAdmin
+        ? {
+            recoveryEmail: formRecoveryEmail.trim().toLowerCase() || undefined,
+            recoveryPhone: formRecoveryPhone.trim() || undefined
+          }
+        : {})
     };
 
     if (editingUsername) {
@@ -281,14 +501,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   };
 
   const getDepartmentRecordCount = (user: UserAccount) => {
-    if (!user.assignedDepartment || user.assignedDepartment === 'ALL') {
-      if (user.programLevelScope === 'ALL') return records.length;
-      return records.filter((r) => r[1] === user.programLevelScope).length;
+    const hasSpecificDepts = parseAssignedDepartments(user.assignedDepartment).length > 0;
+    const hasSpecificPrograms = parseProgramLevelScopes(user.programLevelScope).length > 0;
+    if (!hasSpecificDepts && !hasSpecificPrograms) {
+      return records.length;
     }
     return records.filter((r) => {
-      const matchDept = r[2].toLowerCase() === user.assignedDepartment!.toLowerCase();
-      const matchProgram =
-        user.programLevelScope === 'ALL' || r[1] === user.programLevelScope;
+      const matchDept = matchesAssignedDepartment(r[2], user.assignedDepartment);
+      const matchProgram = matchesProgramLevelScope(r[1], user.programLevelScope);
       return matchDept && matchProgram;
     }).length;
   };
@@ -328,14 +548,24 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
           </button>
         </div>
 
+        {/* Single-Admin Policy Notice */}
+        <div className="mb-4 p-2.5 px-3.5 bg-[#EFF6F3] dark:bg-white/5 border border-[#C5D8CF] dark:border-white/10 rounded-xl text-xs text-[#0F4C3A] dark:text-[#A9D3C2] flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-[#E0A526] shrink-0" />
+            <span>
+              <strong>Single Admin Account Policy:</strong> Only <strong>1 Administrator (@admin)</strong> exists in Department Assignment Offering. Offering <strong>All Departments + ALL Program Levels</strong> grants full student-list viewing without Admin permissions; new entries submitted by non-admins require Admin approval.
+            </span>
+          </div>
+        </div>
+
         {/* Action Bar */}
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2 text-xs font-semibold text-[#5B6B70] dark:text-[#9DB0AA]">
             <span>Total Accounts: <strong className="text-[#0F4C3A] dark:text-white">{users.length}</strong></span>
             <span>·</span>
-            <span>Active: <strong className="text-emerald-700 dark:text-emerald-400">{users.filter((u) => u.isActive !== false).length}</strong></span>
+            <span>Admin Accounts: <strong className="text-[#B45309] dark:text-[#E0A526]">{users.filter((u) => u.role === 'admin').length} (Max 1)</strong></span>
             <span>·</span>
-            <span>Deactivated: <strong className="text-amber-700 dark:text-amber-400">{users.filter((u) => u.isActive === false).length}</strong></span>
+            <span>Active: <strong className="text-emerald-700 dark:text-emerald-400">{users.filter((u) => u.isActive !== false).length}</strong></span>
           </div>
           {!showAddForm ? (
             <button
@@ -346,7 +576,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               className="px-3.5 py-1.5 bg-[#0F4C3A] hover:bg-[#1A5C49] text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs cursor-pointer"
             >
               <Plus className="w-4 h-4 text-[#E0A526]" />
-              <span>Create User by Department</span>
+              <span>Create User / Department Offering</span>
             </button>
           ) : (
             <button
@@ -385,10 +615,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               <span>
                 {editingUsername
                   ? `Edit User & Department Assignment: ${editingUsername}`
-                  : 'Create User by Department (Offer / Assignment)'}
+                  : 'Create User by Department (Offer / Assignment — Non-Admin)'}
               </span>
               <span className="text-[11px] font-normal text-[#5B6B70] dark:text-[#9DB0AA]">
-                Users with assigned departments can only add and edit student records within that department.
+                Non-admin users submit new records as Pending until Admin approves.
               </span>
             </div>
 
@@ -430,68 +660,324 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               </div>
             </div>
 
-            {/* Row 2: Program Level & Department Assignment */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Row 2: Program Level Scope (Multi-Select) & Department Assignment (Multi-Select) */}
+            <div className="grid grid-cols-1 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-[#324840] dark:text-[#CFE6DC] mb-1">
-                  1. Program Level Scope <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={formProgramScope}
-                  onChange={(e) => setFormProgramScope(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-[#BFCDC8] dark:border-[#354C45] bg-white dark:bg-[#101A17] rounded-lg text-xs focus:ring-1 focus:ring-[#E0A526] focus:outline-none"
-                >
-                  {PROGRAM_LEVELS.map((lvl) => (
-                    <option key={lvl} value={lvl}>
-                      {lvl}
-                    </option>
-                  ))}
-                  <option value="ALL">ALL Program Levels (Institution-wide)</option>
-                </select>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
                   <label className="text-xs font-semibold text-[#324840] dark:text-[#CFE6DC]">
-                    2. Assigned Department <span className="text-red-500">*</span>
+                    1. Program Level Scope — Multi-Select <span className="text-red-500">*</span>
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsCustomDept(!isCustomDept);
-                      if (!isCustomDept) setFormDepartment('CUSTOM');
-                      else setFormDepartment(allDepartments[0] || 'ALL');
-                    }}
-                    className="text-[11px] text-[#0F4C3A] dark:text-[#E0A526] hover:underline cursor-pointer"
-                  >
-                    {isCustomDept ? 'Pick from list' : 'Custom department'}
-                  </button>
+                  {editingUsername !== 'admin' && (
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormProgramMode('ALL');
+                          setFormSelectedPrograms([]);
+                        }}
+                        className={`px-2 py-0.5 rounded border font-semibold cursor-pointer transition-colors ${
+                          formProgramMode === 'ALL'
+                            ? 'bg-[#0F4C3A] text-white border-[#0F4C3A]'
+                            : 'bg-white dark:bg-[#101A17] text-[#324840] dark:text-[#CFE6DC] border-[#BFCDC8] dark:border-[#354C45] hover:bg-[#EFF6F3]'
+                        }`}
+                      >
+                        All Program Levels (ALL)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormProgramMode('SPECIFIC')}
+                        className={`px-2 py-0.5 rounded border font-semibold cursor-pointer transition-colors ${
+                          formProgramMode === 'SPECIFIC'
+                            ? 'bg-[#0F4C3A] text-white border-[#0F4C3A]'
+                            : 'bg-white dark:bg-[#101A17] text-[#324840] dark:text-[#CFE6DC] border-[#BFCDC8] dark:border-[#354C45] hover:bg-[#EFF6F3]'
+                        }`}
+                      >
+                        Select Multiple Level(s) ({formSelectedPrograms.length})
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {isCustomDept ? (
-                  <input
-                    type="text"
-                    value={customDeptInput}
-                    onChange={(e) => setCustomDeptInput(e.target.value)}
-                    placeholder="Enter department name (e.g. Accounting, Law)..."
-                    className="w-full px-3 py-1.5 border border-[#BFCDC8] dark:border-[#354C45] bg-white dark:bg-[#101A17] rounded-lg text-xs focus:ring-1 focus:ring-[#E0A526] focus:outline-none"
-                    required
-                  />
+                {editingUsername === 'admin' ? (
+                  <div className="w-full px-3 py-2 border border-[#BFCDC8] dark:border-[#354C45] bg-white/60 dark:bg-[#101A17]/60 rounded-lg text-xs font-semibold text-[#5B6B70] dark:text-[#9DB0AA]">
+                    ALL Program Levels (Sole Admin)
+                  </div>
+                ) : formProgramMode === 'ALL' ? (
+                  <div className="p-3 border border-[#BFCDC8] dark:border-[#354C45] bg-white dark:bg-[#101A17] rounded-lg flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="text-[#324840] dark:text-[#CFE6DC]">
+                      <strong>ALL Program Levels</strong> — User can view & submit records for any program level (Cannot Act as Admin).
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFormProgramMode('SPECIFIC')}
+                      className="text-[11px] font-semibold text-[#0F4C3A] dark:text-[#E0A526] hover:underline cursor-pointer"
+                    >
+                      Pick specific program levels →
+                    </button>
+                  </div>
                 ) : (
-                  <select
-                    value={formDepartment}
-                    onChange={(e) => setFormDepartment(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-[#BFCDC8] dark:border-[#354C45] bg-white dark:bg-[#101A17] rounded-lg text-xs focus:ring-1 focus:ring-[#E0A526] focus:outline-none"
-                  >
-                    <option value="ALL">ALL Departments (Full Program Level Access)</option>
-                    <optgroup label="Academic Departments">
-                      {allDepartments.map((dept) => (
-                        <option key={dept} value={dept}>
-                          {dept} (Add/Edit only {dept})
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
+                  <div className="border border-[#BFCDC8] dark:border-[#354C45] bg-white dark:bg-[#101A17] rounded-xl p-3 space-y-2.5">
+                    {formSelectedPrograms.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pb-2 border-b border-[#E3ECE7] dark:border-white/10">
+                        {formSelectedPrograms.map((lvl) => (
+                          <span
+                            key={lvl}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#EFF6F3] dark:bg-emerald-950/60 text-[#0F4C3A] dark:text-[#A9D3C2] border border-[#C5D8CF] dark:border-emerald-800 text-[11px] font-semibold"
+                          >
+                            <span>{lvl}</span>
+                            <button
+                              type="button"
+                              onClick={() => toggleProgramSelection(lvl)}
+                              className="text-[#5B6B70] hover:text-red-600 dark:hover:text-red-400 cursor-pointer"
+                              title={`Remove ${lvl}`}
+                              aria-label={`Remove ${lvl}`}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] text-[#5B6B70] dark:text-[#9DB0AA]">
+                        Check one or more program levels to assign to this user:
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setFormSelectedPrograms(allProgramLevels)}
+                          className="px-2 py-1 text-[11px] font-semibold text-[#0F4C3A] dark:text-[#A9D3C2] bg-[#EFF6F3] dark:bg-white/10 hover:bg-[#E1EEE8] rounded cursor-pointer"
+                        >
+                          Select All ({allProgramLevels.length})
+                        </button>
+                        {formSelectedPrograms.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setFormSelectedPrograms([])}
+                            className="px-2 py-1 text-[11px] font-semibold text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 rounded cursor-pointer"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                      {allProgramLevels.map((lvl) => {
+                        const isChecked = formSelectedPrograms.some(
+                          (p) => p.toLowerCase() === lvl.toLowerCase()
+                        );
+                        return (
+                          <label
+                            key={lvl}
+                            className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors select-none ${
+                              isChecked
+                                ? 'bg-[#EFF6F3] dark:bg-emerald-950/50 border-[#0F4C3A] dark:border-[#E0A526] text-[#0F4C3A] dark:text-white font-semibold'
+                                : 'bg-[#FAFDFB] dark:bg-[#16221F] border-[#E3ECE7] dark:border-white/10 text-[#324840] dark:text-[#CFE6DC] hover:border-[#A2C4B7]'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleProgramSelection(lvl)}
+                              className="accent-[#0F4C3A] w-3.5 h-3.5 shrink-0 cursor-pointer"
+                            />
+                            <span className="truncate">{lvl}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-2 border-t border-[#E3ECE7] dark:border-white/10">
+                      <input
+                        type="text"
+                        value={customProgramInput}
+                        onChange={(e) => setCustomProgramInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddCustomProgram();
+                          }
+                        }}
+                        placeholder="Add custom program level..."
+                        className="flex-1 px-2.5 py-1 border border-[#BFCDC8] dark:border-[#354C45] bg-[#FAFDFB] dark:bg-[#16221F] rounded-lg text-xs focus:ring-1 focus:ring-[#E0A526] focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCustomProgram}
+                        className="px-2.5 py-1 bg-[#1F7A5C] hover:bg-[#176148] text-white rounded-lg text-[11px] font-semibold flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Add Level</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="sm:col-span-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                  <label className="text-xs font-semibold text-[#324840] dark:text-[#CFE6DC]">
+                    2. Assigned Department(s) — Multi-Select <span className="text-red-500">*</span>
+                  </label>
+                  {editingUsername !== 'admin' && (
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormDeptMode('ALL');
+                          setFormSelectedDepts([]);
+                        }}
+                        className={`px-2 py-0.5 rounded border font-semibold cursor-pointer transition-colors ${
+                          formDeptMode === 'ALL'
+                            ? 'bg-[#0F4C3A] text-white border-[#0F4C3A]'
+                            : 'bg-white dark:bg-[#101A17] text-[#324840] dark:text-[#CFE6DC] border-[#BFCDC8] dark:border-[#354C45] hover:bg-[#EFF6F3]'
+                        }`}
+                      >
+                        All Departments (ALL)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormDeptMode('SPECIFIC')}
+                        className={`px-2 py-0.5 rounded border font-semibold cursor-pointer transition-colors ${
+                          formDeptMode === 'SPECIFIC'
+                            ? 'bg-[#0F4C3A] text-white border-[#0F4C3A]'
+                            : 'bg-white dark:bg-[#101A17] text-[#324840] dark:text-[#CFE6DC] border-[#BFCDC8] dark:border-[#354C45] hover:bg-[#EFF6F3]'
+                        }`}
+                      >
+                        Select Multiple Department(s) ({formSelectedDepts.length})
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {editingUsername === 'admin' ? (
+                  <div className="w-full px-3 py-2 border border-[#BFCDC8] dark:border-[#354C45] bg-white/60 dark:bg-[#101A17]/60 rounded-lg text-xs font-semibold text-[#5B6B70] dark:text-[#9DB0AA]">
+                    ALL Departments (Sole Admin)
+                  </div>
+                ) : formDeptMode === 'ALL' ? (
+                  <div className="p-3 border border-[#BFCDC8] dark:border-[#354C45] bg-white dark:bg-[#101A17] rounded-lg flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="text-[#324840] dark:text-[#CFE6DC]">
+                      <strong>ALL Departments</strong> — User can view & submit records for any department (Cannot Act as Admin).
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFormDeptMode('SPECIFIC')}
+                      className="text-[11px] font-semibold text-[#0F4C3A] dark:text-[#E0A526] hover:underline cursor-pointer"
+                    >
+                      Pick specific departments →
+                    </button>
+                  </div>
+                ) : (
+                  <div className="border border-[#BFCDC8] dark:border-[#354C45] bg-white dark:bg-[#101A17] rounded-xl p-3 space-y-2.5">
+                    {/* Selected Department Tags */}
+                    {formSelectedDepts.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pb-2 border-b border-[#E3ECE7] dark:border-white/10">
+                        {formSelectedDepts.map((dept) => (
+                          <span
+                            key={dept}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#EFF6F3] dark:bg-emerald-950/60 text-[#0F4C3A] dark:text-[#A9D3C2] border border-[#C5D8CF] dark:border-emerald-800 text-[11px] font-semibold"
+                          >
+                            <span>{dept}</span>
+                            <button
+                              type="button"
+                              onClick={() => toggleDepartmentSelection(dept)}
+                              className="text-[#5B6B70] hover:text-red-600 dark:hover:text-red-400 cursor-pointer"
+                              title={`Remove ${dept}`}
+                              aria-label={`Remove ${dept}`}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Filter & Quick Select Controls */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="search"
+                        value={deptSearchQuery}
+                        onChange={(e) => setDeptSearchQuery(e.target.value)}
+                        placeholder="Search departments to check..."
+                        className="flex-1 min-w-[160px] px-2.5 py-1 border border-[#BFCDC8] dark:border-[#354C45] bg-[#FAFDFB] dark:bg-[#16221F] rounded-lg text-xs focus:ring-1 focus:ring-[#E0A526] focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormSelectedDepts(allDepartments)}
+                        className="px-2 py-1 text-[11px] font-semibold text-[#0F4C3A] dark:text-[#A9D3C2] bg-[#EFF6F3] dark:bg-white/10 hover:bg-[#E1EEE8] rounded cursor-pointer"
+                      >
+                        Select All ({allDepartments.length})
+                      </button>
+                      {formSelectedDepts.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setFormSelectedDepts([])}
+                          className="px-2 py-1 text-[11px] font-semibold text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 rounded cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Multi-Select Checkbox Grid */}
+                    <div className="max-h-40 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 pr-1">
+                      {filteredDepartmentOptions.map((dept) => {
+                        const isChecked = formSelectedDepts.some(
+                          (d) => d.toLowerCase() === dept.toLowerCase()
+                        );
+                        return (
+                          <label
+                            key={dept}
+                            className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors select-none ${
+                              isChecked
+                                ? 'bg-[#EFF6F3] dark:bg-emerald-950/50 border-[#0F4C3A] dark:border-[#E0A526] text-[#0F4C3A] dark:text-white font-semibold'
+                                : 'bg-[#FAFDFB] dark:bg-[#16221F] border-[#E3ECE7] dark:border-white/10 text-[#324840] dark:text-[#CFE6DC] hover:border-[#A2C4B7]'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleDepartmentSelection(dept)}
+                              className="accent-[#0F4C3A] w-3.5 h-3.5 shrink-0 cursor-pointer"
+                            />
+                            <span className="truncate">{dept}</span>
+                          </label>
+                        );
+                      })}
+                      {filteredDepartmentOptions.length === 0 && (
+                        <div className="col-span-full text-[11px] text-[#5B6B70] dark:text-[#9DB0AA] py-2 text-center">
+                          No matching departments. Add a custom department below.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Add Custom Department into Multi-Select */}
+                    <div className="flex items-center gap-2 pt-2 border-t border-[#E3ECE7] dark:border-white/10">
+                      <input
+                        type="text"
+                        value={customDeptInput}
+                        onChange={(e) => setCustomDeptInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddCustomDepartment();
+                          }
+                        }}
+                        placeholder="Add custom department name..."
+                        className="flex-1 px-2.5 py-1 border border-[#BFCDC8] dark:border-[#354C45] bg-[#FAFDFB] dark:bg-[#16221F] rounded-lg text-xs focus:ring-1 focus:ring-[#E0A526] focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCustomDepartment}
+                        className="px-2.5 py-1 bg-[#1F7A5C] hover:bg-[#176148] text-white rounded-lg text-[11px] font-semibold flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Add Dept</span>
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -628,6 +1114,50 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               </div>
             </div>
 
+            {editingUsername === 'admin' && (
+              <div className="p-3 bg-[#EFF6F3] dark:bg-emerald-950/30 rounded-xl border border-[#C5D8CF] dark:border-emerald-800/60 space-y-2.5">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#0F4C3A] dark:text-[#A9D3C2]">
+                  <Shield className="w-4 h-4 text-[#E0A526]" />
+                  <span>Admin-Only Password Recovery Contacts (Email &amp; Phone Number)</span>
+                </div>
+                <p className="text-[11px] text-[#324840] dark:text-[#CFE6DC]">
+                  Connect an Email Address, Phone Number, or both exclusively to <strong>@admin</strong> so you can receive a verification code if the Administrator password is lost.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#324840] dark:text-[#CFE6DC] mb-1">
+                      Recovery Email Address
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-3.5 h-3.5 text-[#6D857C] absolute left-2.5 top-2 pointer-events-none" />
+                      <input
+                        type="email"
+                        value={formRecoveryEmail}
+                        onChange={(e) => setFormRecoveryEmail(e.target.value)}
+                        placeholder="e.g. admin@osu.edu.et"
+                        className="w-full pl-8 pr-3 py-1.5 border border-[#BFCDC8] dark:border-[#354C45] bg-white dark:bg-[#101A17] rounded-lg text-xs focus:ring-1 focus:ring-[#E0A526] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#324840] dark:text-[#CFE6DC] mb-1">
+                      Recovery Phone Number
+                    </label>
+                    <div className="relative">
+                      <Phone className="w-3.5 h-3.5 text-[#6D857C] absolute left-2.5 top-2 pointer-events-none" />
+                      <input
+                        type="tel"
+                        value={formRecoveryPhone}
+                        onChange={(e) => setFormRecoveryPhone(e.target.value)}
+                        placeholder="e.g. +251 911 234 567"
+                        className="w-full pl-8 pr-3 py-1.5 border border-[#BFCDC8] dark:border-[#354C45] bg-white dark:bg-[#101A17] rounded-lg font-mono text-xs focus:ring-1 focus:ring-[#E0A526] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
@@ -721,23 +1251,115 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
                       {/* Department & Program Scope Badges */}
                       <div className="flex flex-wrap items-center gap-2 mt-1 text-xs">
-                        {account.assignedDepartment && account.assignedDepartment !== 'ALL' ? (
-                          <span className="inline-flex items-center gap-1 font-bold text-xs px-2 py-0.5 bg-[#EFF6F3] dark:bg-white/10 text-[#0F4C3A] dark:text-[#E0A526] rounded border border-[#C5D8CF] dark:border-white/10">
-                            <Briefcase className="w-3.5 h-3.5 text-[#0F4C3A] dark:text-[#E0A526]" />
-                            <span>Department: <strong>{account.assignedDepartment}</strong></span>
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-[#5B6B70] dark:text-[#9DB0AA] font-medium">
-                            All Departments
+                        {account.role === 'admin' && (
+                          <>
+                            <span className="inline-flex items-center gap-1 font-bold text-[10px] px-2 py-0.5 bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-700">
+                              <Shield className="w-3 h-3 text-[#E0A526]" />
+                              <span>Sole System Admin (Only 1 Allowed)</span>
+                            </span>
+                            {(account.recoveryEmail || account.recoveryPhone) ? (
+                              <span className="inline-flex flex-wrap items-center gap-1 font-semibold text-[10px] px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 rounded border border-emerald-200 dark:border-emerald-800">
+                                {account.recoveryEmail && (
+                                  <>
+                                    <Mail className="w-3 h-3" />
+                                    <span>{account.recoveryEmail}</span>
+                                  </>
+                                )}
+                                {account.recoveryEmail && account.recoveryPhone && <span>·</span>}
+                                {account.recoveryPhone && (
+                                  <>
+                                    <Phone className="w-3 h-3" />
+                                    <span>{account.recoveryPhone}</span>
+                                  </>
+                                )}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleStartEdit(account)}
+                                className="inline-flex items-center gap-1 font-semibold text-[10px] px-2 py-0.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-700 cursor-pointer"
+                              >
+                                <Mail className="w-3 h-3" />
+                                <span>Connect Recovery Email / Phone</span>
+                              </button>
+                            )}
+                          </>
+                        )}
+
+                        {(account.role === 'all_viewer' || account.role === 'registrar') && (
+                          <span className="inline-flex items-center gap-1 font-bold text-[10px] px-2 py-0.5 bg-cyan-50 dark:bg-cyan-950/50 text-cyan-800 dark:text-cyan-300 rounded border border-cyan-200 dark:border-cyan-800">
+                            <Eye className="w-3 h-3" />
+                            <span>View All Student List · Non-Admin</span>
                           </span>
                         )}
 
-                        <span className="text-[11px] text-[#5B6B70] dark:text-[#9DB0AA]">
-                          Level: <strong>{account.programLevelScope}</strong>
-                        </span>
+                        {(() => {
+                          const assignedList = parseAssignedDepartments(account.assignedDepartment);
+                          if (assignedList.length === 0) {
+                            return (
+                              <span className="text-[11px] text-[#5B6B70] dark:text-[#9DB0AA] font-medium">
+                                All Departments
+                              </span>
+                            );
+                          }
+                          if (assignedList.length === 1) {
+                            return (
+                              <span className="inline-flex items-center gap-1 font-bold text-xs px-2 py-0.5 bg-[#EFF6F3] dark:bg-white/10 text-[#0F4C3A] dark:text-[#E0A526] rounded border border-[#C5D8CF] dark:border-white/10">
+                                <Briefcase className="w-3.5 h-3.5 text-[#0F4C3A] dark:text-[#E0A526]" />
+                                <span>Department: <strong>{assignedList[0]}</strong></span>
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="inline-flex flex-wrap items-center gap-1 font-bold text-xs px-2 py-0.5 bg-[#EFF6F3] dark:bg-white/10 text-[#0F4C3A] dark:text-[#E0A526] rounded border border-[#C5D8CF] dark:border-white/10">
+                              <Briefcase className="w-3.5 h-3.5 text-[#0F4C3A] dark:text-[#E0A526] shrink-0" />
+                              <span>Departments ({assignedList.length}):</span>
+                              {assignedList.map((d) => (
+                                <span
+                                  key={d}
+                                  className="px-1.5 py-0.2 bg-white dark:bg-[#101A17] text-[#0F4C3A] dark:text-[#A9D3C2] rounded border border-[#C5D8CF] dark:border-white/15 text-[10px] font-semibold"
+                                >
+                                  {d}
+                                </span>
+                              ))}
+                            </span>
+                          );
+                        })()}
+
+                        {(() => {
+                          const progList = parseProgramLevelScopes(account.programLevelScope);
+                          if (progList.length === 0) {
+                            return (
+                              <span className="text-[11px] text-[#5B6B70] dark:text-[#9DB0AA]">
+                                Level: <strong>ALL</strong>
+                              </span>
+                            );
+                          }
+                          if (progList.length === 1) {
+                            return (
+                              <span className="text-[11px] text-[#5B6B70] dark:text-[#9DB0AA]">
+                                Level: <strong>{progList[0]}</strong>
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="inline-flex flex-wrap items-center gap-1 text-[11px] text-[#5B6B70] dark:text-[#9DB0AA]">
+                              <span>Levels ({progList.length}):</span>
+                              {progList.map((lvl) => (
+                                <span
+                                  key={lvl}
+                                  className="px-1.5 py-0.2 bg-[#EFF6F3] dark:bg-white/10 text-[#0F4C3A] dark:text-[#A9D3C2] rounded border border-[#C5D8CF] dark:border-white/15 text-[10px] font-semibold"
+                                >
+                                  {lvl}
+                                </span>
+                              ))}
+                            </span>
+                          );
+                        })()}
 
                         {/* Offer Status */}
-                        {account.assignedDepartment && account.assignedDepartment !== 'ALL' && (
+                        {(parseAssignedDepartments(account.assignedDepartment).length > 0 ||
+                          account.role === 'all_viewer') && (
                           account.departmentOfferStatus === 'offered' ? (
                             <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 rounded border border-amber-200 dark:border-amber-800">
                               <Clock className="w-3 h-3" />

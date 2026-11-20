@@ -3,6 +3,13 @@ import { CampusSummary, DepartmentSummary, RawRecord } from '../types';
 export const YEARS = [2014, 2015, 2016, 2017, 2018] as const;
 export type Year = typeof YEARS[number];
 
+export function getAllYearsFromRecords(records: RawRecord[]): number[] {
+  const fromRecords = records
+    .map((r) => r[0])
+    .filter((y) => typeof y === 'number' && !isNaN(y) && y >= 1900 && y <= 2200);
+  return Array.from(new Set([...YEARS, ...fromRecords])).sort((a, b) => a - b);
+}
+
 export const PROGRAM_LEVELS = [
   '1st Degree (Applied)',
   '1st Degree (Education)',
@@ -47,6 +54,15 @@ export interface AnalyticsResult {
   modeBreakdown: { mode: string; counts: number[]; total: number }[];
 
   // Specific gender breakdowns
+  genderByLevelAllYears: { level: string; male: number; female: number; total: number; femalePct: number; shareOfAllYears: number }[];
+  genderByLevelByYear: {
+    year: number;
+    maleTotal: number;
+    femaleTotal: number;
+    total: number;
+    femalePct: number;
+    levels: { level: string; male: number; female: number; total: number; femalePct: number; shareOfYear: number }[];
+  }[];
   genderByLevel2018: { level: string; male: number; female: number; total: number; femalePct: number; shareOf2018: number }[];
   genderByMode2018: { mode: string; male: number; female: number; total: number; femalePct: number; shareOf2018: number }[];
   genderTrendByLevel: { level: string; femalePctByYear: (number | null)[] }[];
@@ -139,8 +155,21 @@ export function computeAnalytics(records: RawRecord[]): AnalyticsResult {
       ? (female2018ExDiploma / total2018ExDiploma) * 100
       : 0;
 
+  const activeProgramLevels = Array.from(
+    new Set([
+      ...PROGRAM_LEVELS,
+      ...records.map((r) => (r[1] || '').trim()).filter(Boolean)
+    ])
+  );
+  const activeStudyModes = Array.from(
+    new Set([
+      ...STUDY_MODES,
+      ...records.map((r) => (r[3] || '').trim()).filter(Boolean)
+    ])
+  );
+
   // Program Level Breakdown
-  const levelBreakdown = PROGRAM_LEVELS.map((lvl) => {
+  const levelBreakdown = activeProgramLevels.map((lvl) => {
     const counts = activeYears.map((yr) =>
       sum(
         records
@@ -156,7 +185,7 @@ export function computeAnalytics(records: RawRecord[]): AnalyticsResult {
   });
 
   // Study Mode Breakdown
-  const modeBreakdown = STUDY_MODES.map((mode) => {
+  const modeBreakdown = activeStudyModes.map((mode) => {
     const counts = activeYears.map((yr) =>
       sum(
         records
@@ -171,9 +200,56 @@ export function computeAnalytics(records: RawRecord[]): AnalyticsResult {
     };
   });
 
+  // All-Years Gender by Level (dynamically across all active years & levels)
+  const tAll = totalAllYears || 1;
+  const genderByLevelAllYears = activeProgramLevels.map((lvl) => {
+    const recs = records.filter((r) => r[1] === lvl);
+    const m = sum(recs.map((r) => r[5] || 0));
+    const f = sum(recs.map((r) => r[6] || 0));
+    const tot = m + f;
+    return {
+      level: lvl,
+      male: m,
+      female: f,
+      total: tot,
+      femalePct: tot > 0 ? (f / tot) * 100 : 0,
+      shareOfAllYears: (tot / tAll) * 100
+    };
+  });
+
+  // Per-Year Gender by Level for every active year (auto-includes newly added years)
+  const genderByLevelByYear = activeYears.map((yr, yrIdx) => {
+    const yearTotal = totalByYear[yrIdx] || 0;
+    const denom = yearTotal || 1;
+    const levels = activeProgramLevels.map((lvl) => {
+      const recs = records.filter((r) => r[0] === yr && r[1] === lvl);
+      const m = sum(recs.map((r) => r[5] || 0));
+      const f = sum(recs.map((r) => r[6] || 0));
+      const tot = m + f;
+      return {
+        level: lvl,
+        male: m,
+        female: f,
+        total: tot,
+        femalePct: tot > 0 ? (f / tot) * 100 : 0,
+        shareOfYear: (tot / denom) * 100
+      };
+    });
+    const mTot = maleByYear[yrIdx] || 0;
+    const fTot = femaleByYear[yrIdx] || 0;
+    return {
+      year: yr,
+      maleTotal: mTot,
+      femaleTotal: fTot,
+      total: yearTotal,
+      femalePct: yearTotal > 0 ? (fTot / yearTotal) * 100 : 0,
+      levels
+    };
+  });
+
   // Latest year Gender by Level
   const tLatest = totalByYear[latestIdx] || 1;
-  const genderByLevel2018 = PROGRAM_LEVELS.map((lvl) => {
+  const genderByLevel2018 = activeProgramLevels.map((lvl) => {
     const recs = records.filter((r) => r[0] === latestYear && r[1] === lvl);
     const m = sum(recs.map((r) => r[5] || 0));
     const f = sum(recs.map((r) => r[6] || 0));
@@ -189,7 +265,7 @@ export function computeAnalytics(records: RawRecord[]): AnalyticsResult {
   });
 
   // Latest year Gender by Mode
-  const genderByMode2018 = STUDY_MODES.map((mode) => {
+  const genderByMode2018 = activeStudyModes.map((mode) => {
     const recs = records.filter((r) => r[0] === latestYear && r[3] === mode);
     const m = sum(recs.map((r) => r[5] || 0));
     const f = sum(recs.map((r) => r[6] || 0));
@@ -205,7 +281,7 @@ export function computeAnalytics(records: RawRecord[]): AnalyticsResult {
   });
 
   // Gender Trend by Level across all active years
-  const genderTrendByLevel = PROGRAM_LEVELS.map((lvl) => {
+  const genderTrendByLevel = activeProgramLevels.map((lvl) => {
     const femalePctByYear = activeYears.map((yr) => {
       const recs = records.filter((r) => r[0] === yr && r[1] === lvl);
       const m = sum(recs.map((r) => r[5] || 0));
@@ -345,6 +421,8 @@ export function computeAnalytics(records: RawRecord[]): AnalyticsResult {
     femaleShare2018ExDiploma,
     levelBreakdown,
     modeBreakdown,
+    genderByLevelAllYears,
+    genderByLevelByYear,
     genderByLevel2018,
     genderByMode2018,
     genderTrendByLevel,
@@ -370,6 +448,28 @@ export function formatPct(p: number | null | undefined, includePlus = false): st
   if (p === null || p === undefined || !Number.isFinite(p)) return '–';
   const prefix = includePlus && p > 0 ? '+' : '';
   return `${prefix}${p.toFixed(1)}%`;
+}
+
+export function formatYearSpan(
+  years?: number[],
+  separator: string = '–',
+  fallback?: string
+): string {
+  if (!years || years.length === 0) {
+    return fallback ?? `2014${separator}2018`;
+  }
+  const first = years[0];
+  const last = years[years.length - 1];
+  return first === last ? `${first}` : `${first}${separator}${last}`;
+}
+
+export function resolveDynamicReportTitle(title: string, years?: number[]): string {
+  const span = formatYearSpan(years, '–');
+  if (!title) return `Student Entry Analysis, ${span}`;
+  return title.replace(
+    /(Student Entry Analysis,\s*)(?:\d{4}\s*[–-]\s*\d{4}|\d{4})/gi,
+    `$1${span}`
+  );
 }
 
 /**

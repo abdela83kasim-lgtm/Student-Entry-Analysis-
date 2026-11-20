@@ -1,14 +1,44 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
+      },
+    },
+    build: {
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              {
+                name: 'firebase-firestore',
+                test: /node_modules[\\/]@firebase[\\/]firestore[\\/]/,
+                priority: 25,
+              },
+              {
+                name: 'firebase-vendor',
+                test: /node_modules[\\/](firebase|@firebase)[\\/]/,
+                priority: 20,
+              },
+              {
+                name: 'react-vendor',
+                test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+                priority: 15,
+              },
+              {
+                name: 'ui-vendor',
+                test: /node_modules[\\/](lucide-react|motion|framer-motion)[\\/]/,
+                priority: 10,
+              },
+            ],
+          },
+        },
       },
     },
     server: {

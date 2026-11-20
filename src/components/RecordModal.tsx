@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RawRecord } from '../types';
+import { RawRecord, parseAssignedDepartments, parseProgramLevelScopes } from '../types';
 import { PROGRAM_LEVELS, STUDY_MODES, formatPct, getDefaultSourceCell } from '../data/analytics';
 import { X, Check, Plus, Calculator, Building2, GraduationCap, Users } from 'lucide-react';
 
@@ -10,8 +10,11 @@ interface RecordModalProps {
   index: number | null;
   onSave: (record: RawRecord, index: number | null, andAddAnother?: boolean) => void;
   defaultProgramLevel?: string;
+  programLevelScope?: string;
   assignedDepartment?: string;
   existingDepartments?: string[];
+  availableYears?: number[];
+  isAdmin?: boolean;
 }
 
 const COMMON_CAMPUSES = [
@@ -34,10 +37,29 @@ export const RecordModal: React.FC<RecordModalProps> = ({
   index,
   onSave,
   defaultProgramLevel,
+  programLevelScope,
   assignedDepartment,
-  existingDepartments = []
+  existingDepartments = [],
+  availableYears = [2014, 2015, 2016, 2017, 2018],
+  isAdmin = true
 }) => {
-  const [year, setYear] = useState<number>(2018);
+  const latestExistingYear =
+    availableYears.length > 0 ? availableYears[availableYears.length - 1] : 2018;
+  const yearSuggestions = Array.from(
+    new Set([...availableYears, latestExistingYear + 1])
+  ).sort((a, b) => a - b);
+
+  const scopedPrograms = parseProgramLevelScopes(programLevelScope ?? defaultProgramLevel);
+  const isSingleScopedProgram = scopedPrograms.length === 1;
+  const isMultiScopedProgram = scopedPrograms.length > 1;
+  const isProgramScoped = scopedPrograms.length > 0;
+
+  const assignedDepts = parseAssignedDepartments(assignedDepartment);
+  const isSingleAssignedDept = assignedDepts.length === 1;
+  const isMultiAssignedDept = assignedDepts.length > 1;
+  const isDeptScoped = assignedDepts.length > 0;
+
+  const [year, setYear] = useState<number>(latestExistingYear);
   const [program, setProgram] = useState<string>(PROGRAM_LEVELS[0]);
   const [customProgram, setCustomProgram] = useState<string>('');
   const [isCustomProgram, setIsCustomProgram] = useState<boolean>(false);
@@ -82,10 +104,10 @@ export const RecordModal: React.FC<RecordModalProps> = ({
       setFemale(record[6] !== null && record[6] !== undefined ? String(record[6]) : '');
     } else {
       // Adding a new student record
-      const defYear = 2018;
+      const defYear = latestExistingYear;
       const defProgram =
-        defaultProgramLevel && (PROGRAM_LEVELS as readonly string[]).includes(defaultProgramLevel)
-          ? defaultProgramLevel
+        scopedPrograms.length > 0
+          ? scopedPrograms[0]
           : PROGRAM_LEVELS[0];
       const defMode = STUDY_MODES[0];
 
@@ -94,7 +116,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
       setIsCustomProgram(false);
       setCustomProgram('');
       setDepartment(
-        assignedDepartment && assignedDepartment !== 'ALL' ? assignedDepartment : ''
+        assignedDepts.length > 0 ? assignedDepts[0] : ''
       );
       setMode(defMode);
       setIsCustomMode(false);
@@ -104,7 +126,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
       setFemale('');
     }
     setError('');
-  }, [record, isOpen, defaultProgramLevel, assignedDepartment]);
+  }, [record, isOpen, defaultProgramLevel, programLevelScope, assignedDepartment, latestExistingYear]);
 
   if (!isOpen) return null;
 
@@ -124,17 +146,23 @@ export const RecordModal: React.FC<RecordModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent, andAddAnother = false) => {
     e.preventDefault();
-    const finalDept =
-      assignedDepartment && assignedDepartment !== 'ALL'
-        ? assignedDepartment.trim()
-        : department.trim();
+    if (record && !isAdmin) {
+      setError('Permission restricted: Only Administrator can edit existing records.');
+      return;
+    }
+
+    const finalDept = isSingleAssignedDept
+      ? assignedDepts[0]
+      : isMultiAssignedDept
+      ? (assignedDepts.includes(department) ? department : assignedDepts[0])
+      : department.trim();
 
     if (!finalDept) {
       setError('Please provide a Department / Discipline name.');
       return;
     }
-    if (!year || isNaN(year) || year < 1900 || year > 2100) {
-      setError('Please enter a valid academic year (e.g. 2018).');
+    if (!year || isNaN(year) || year < 1900 || year > 2200) {
+      setError('Please enter a valid academic year (e.g. 2018, 2019, 2026).');
       return;
     }
 
@@ -150,7 +178,13 @@ export const RecordModal: React.FC<RecordModalProps> = ({
       return;
     }
 
-    const finalProgram = isCustomProgram ? customProgram.trim() : program;
+    const finalProgram = isSingleScopedProgram
+      ? scopedPrograms[0]
+      : isMultiScopedProgram
+      ? (scopedPrograms.includes(program) ? program : scopedPrograms[0])
+      : isCustomProgram
+      ? customProgram.trim()
+      : program;
     if (!finalProgram) {
       setError('Please select or enter a Program Level.');
       return;
@@ -183,7 +217,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
     onSave(updated, index, andAddAnother);
 
     if (andAddAnother) {
-      if (!assignedDepartment || assignedDepartment === 'ALL') {
+      if (!isDeptScoped) {
         setDepartment('');
       }
       setCampus('');
@@ -227,6 +261,16 @@ export const RecordModal: React.FC<RecordModalProps> = ({
           </button>
         </div>
 
+        {!record && !isAdmin && (
+          <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs rounded-lg flex items-center gap-2">
+            <span>🕒</span>
+            <span>
+              <strong>Approval Workflow:</strong> Your new student entry will be marked as{' '}
+              <strong>Pending Approval</strong> until reviewed and approved by the sole System Administrator.
+            </span>
+          </div>
+        )}
+
         {error && (
           <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs rounded-lg flex items-center gap-2">
             <span>⚠</span>
@@ -243,14 +287,20 @@ export const RecordModal: React.FC<RecordModalProps> = ({
               </label>
               <input
                 type="number"
-                value={year}
+                list="record-modal-years-list"
+                value={year || ''}
                 onChange={(e) => setYear(parseInt(e.target.value, 10))}
                 className="w-full px-3 py-2 border border-[#BFCDC8] dark:border-[#354C45] bg-white dark:bg-[#101A17] text-[#162521] dark:text-[#E7EFEC] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E0A526] font-mono text-sm"
                 required
                 min="1900"
-                max="2100"
-                placeholder="e.g. 2018"
+                max="2200"
+                placeholder={`e.g. ${latestExistingYear} or ${latestExistingYear + 1}`}
               />
+              <datalist id="record-modal-years-list">
+                {yearSuggestions.map((yr) => (
+                  <option key={yr} value={yr} />
+                ))}
+              </datalist>
             </div>
 
             <div>
@@ -258,7 +308,11 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                 <label className="text-xs font-semibold text-[#324840] dark:text-[#CFE6DC]">
                   2. Program Level <span className="text-red-500">*</span>
                 </label>
-                {!defaultProgramLevel && (
+                {isMultiScopedProgram ? (
+                  <span className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                    Scoped ({scopedPrograms.length} Levels)
+                  </span>
+                ) : !isProgramScoped && (
                   <button
                     type="button"
                     onClick={() => setIsCustomProgram(!isCustomProgram)}
@@ -269,13 +323,26 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                 )}
               </div>
 
-              {defaultProgramLevel ? (
+              {isSingleScopedProgram ? (
                 <div className="w-full px-3 py-2 border border-[#BFCDC8] dark:border-[#354C45] bg-[#EFF6F3] dark:bg-white/5 text-[#0F4C3A] dark:text-[#A9D3C2] rounded-lg font-medium text-sm flex items-center justify-between">
-                  <span>{defaultProgramLevel}</span>
+                  <span>{scopedPrograms[0]}</span>
                   <span className="text-[10px] uppercase font-bold bg-[#0F4C3A]/10 dark:bg-white/10 px-2 py-0.5 rounded text-[#0F4C3A] dark:text-[#E0A526]">
                     Locked to Assigned Scope
                   </span>
                 </div>
+              ) : isMultiScopedProgram ? (
+                <select
+                  value={scopedPrograms.includes(program) ? program : scopedPrograms[0]}
+                  onChange={(e) => setProgram(e.target.value)}
+                  className="w-full px-3 py-2 border border-[#BFCDC8] dark:border-[#354C45] bg-white dark:bg-[#101A17] text-[#162521] dark:text-[#E7EFEC] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E0A526] text-sm font-medium"
+                  required
+                >
+                  {scopedPrograms.map((lvl) => (
+                    <option key={lvl} value={lvl}>
+                      {lvl}
+                    </option>
+                  ))}
+                </select>
               ) : isCustomProgram ? (
                 <input
                   type="text"
@@ -307,20 +374,33 @@ export const RecordModal: React.FC<RecordModalProps> = ({
               <label className="text-xs font-semibold text-[#324840] dark:text-[#CFE6DC]">
                 3. Department / Discipline <span className="text-red-500">*</span>
               </label>
-              {assignedDepartment && assignedDepartment !== 'ALL' && (
+              {isDeptScoped && (
                 <span className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
-                  Assigned Lead
+                  {isMultiAssignedDept ? `Assigned Lead (${assignedDepts.length} Depts)` : 'Assigned Lead'}
                 </span>
               )}
             </div>
 
-            {assignedDepartment && assignedDepartment !== 'ALL' ? (
+            {isSingleAssignedDept ? (
               <div className="w-full px-3 py-2 border border-[#BFCDC8] dark:border-[#354C45] bg-[#EFF6F3] dark:bg-white/5 text-[#0F4C3A] dark:text-[#A9D3C2] rounded-lg font-bold text-sm flex items-center justify-between">
-                <span>{assignedDepartment}</span>
+                <span>{assignedDepts[0]}</span>
                 <span className="text-[10px] uppercase font-bold bg-[#0F4C3A]/10 dark:bg-white/10 px-2 py-0.5 rounded text-[#0F4C3A] dark:text-[#E0A526]">
                   Locked to Assigned Department
                 </span>
               </div>
+            ) : isMultiAssignedDept ? (
+              <select
+                value={assignedDepts.includes(department) ? department : assignedDepts[0]}
+                onChange={(e) => setDepartment(e.target.value)}
+                className="w-full px-3 py-2 border border-[#BFCDC8] dark:border-[#354C45] bg-white dark:bg-[#101A17] text-[#162521] dark:text-[#E7EFEC] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E0A526] text-sm font-medium"
+                required
+              >
+                {assignedDepts.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
             ) : (
               <>
                 <input
@@ -537,7 +617,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                   onClick={(e) => handleSubmit(e, true)}
                   className="px-4 py-2 border border-[#0F4C3A] text-[#0F4C3A] dark:text-[#A9D3C2] dark:border-[#A9D3C2] hover:bg-[#EFF6F3] dark:hover:bg-white/5 rounded-lg font-medium text-xs sm:text-sm transition-colors cursor-pointer"
                 >
-                  Enroll & Add Another
+                  {isAdmin ? 'Enroll & Add Another' : 'Submit & Add Another'}
                 </button>
               )}
 
@@ -546,7 +626,13 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                 className="px-5 py-2 bg-[#0F4C3A] hover:bg-[#1A5C49] text-white rounded-lg font-medium flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer text-xs sm:text-sm"
               >
                 <Check className="w-4 h-4" />
-                <span>{record ? 'Update Admission Record' : 'Enroll Student Record'}</span>
+                <span>
+                  {record
+                    ? 'Update Admission Record'
+                    : isAdmin
+                    ? 'Enroll Student Record'
+                    : 'Submit for Admin Approval'}
+                </span>
               </button>
             </div>
           </div>

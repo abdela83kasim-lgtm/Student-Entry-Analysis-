@@ -128,11 +128,28 @@ export const DEFAULT_SECTIONS: ReportSectionConfig[] = [
   { id: 'notes', title: 'Methodology & Data Provenance Notes', enabled: true, type: 'notes' }
 ];
 
+export const DEFAULT_PREPARED_BY = 'OFFICE OF THE VICE PRESIDENT FOR ACADEMIC AFFAIRS';
+
+export function normalizePreparedByOffice(preparedBy?: string | null): string {
+  const trimmed = (preparedBy || '').trim();
+  const lower = trimmed.toLowerCase();
+  if (
+    !trimmed ||
+    lower === 'office of institutional research & planning' ||
+    lower === 'office of institutional research and planning' ||
+    lower === 'institutional research office' ||
+    lower === 'institutional research'
+  ) {
+    return DEFAULT_PREPARED_BY;
+  }
+  return trimmed;
+}
+
 export const INITIAL_REPORT: ReportDocument = {
   id: 'rep-osu-2014-2018-master',
   name: 'Student Entry Analysis, 2014–2018',
   institution: 'Oromia State University',
-  preparedBy: 'Office of Institutional Research & Planning',
+  preparedBy: DEFAULT_PREPARED_BY,
   date: 'November 2026',
   status: 'Final',
   sections: DEFAULT_SECTIONS,

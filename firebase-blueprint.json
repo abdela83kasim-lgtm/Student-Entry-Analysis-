@@ -2,56 +2,93 @@
   "entities": {
     "User": {
       "title": "User",
-      "description": "System user with role information and password",
+      "description": "System user with role information, scope, and password",
       "type": "object",
       "properties": {
-        "username": { "type": "string" },
-        "name": { "type": "string" },
-        "role": { "type": "string" },
-        "roleTitle": { "type": "string" },
-        "programLevelScope": { "type": "string" },
-        "assignedDepartment": { "type": "string" },
-        "departmentOfferStatus": { "type": "string" },
+        "username": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "role": {
+          "type": "string",
+          "enum": [
+            "admin",
+            "registrar",
+            "all_viewer",
+            "program_applied",
+            "program_education",
+            "program_diploma",
+            "program_masters",
+            "program_phd",
+            "department_officer"
+          ]
+        },
+        "roleTitle": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "programLevelScope": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "assignedDepartment": { "type": "string", "maxLength": 1000 },
+        "departmentOfferStatus": {
+          "type": "string",
+          "enum": ["assigned", "offered", "accepted", "declined"]
+        },
         "isActive": { "type": "boolean" },
-        "password": { "type": "string" }
+        "dataEntryCompleted": { "type": "boolean" },
+        "description": { "type": "string", "maxLength": 500 },
+        "avatarColor": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "password": { "type": "string", "maxLength": 128 },
+        "recoveryEmail": { "type": "string", "maxLength": 150 },
+        "recoveryPhone": { "type": "string", "maxLength": 40 },
+        "updatedAt": { "type": "number" }
       },
-      "required": ["username", "name", "role"]
+      "required": ["username", "name", "role", "roleTitle", "programLevelScope", "description", "avatarColor"]
     },
     "Record": {
       "title": "Record",
       "description": "Raw student enrollment record",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "year": { "type": "number" },
-        "program": { "type": "string" },
-        "department": { "type": "string" },
-        "mode": { "type": "string" },
-        "campus": { "type": "string" },
+        "program": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "department": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "mode": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "campus": { "type": "string", "maxLength": 150 },
         "male": { "type": "number" },
         "female": { "type": "number" },
-        "total": { "type": "number" }
+        "total": { "type": "number" },
+        "sourceCell": { "type": "string", "maxLength": 100 },
+        "approvalStatus": { "type": "string", "enum": ["approved", "pending", "rejected"] },
+        "submittedBy": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "number" }
       },
-      "required": ["id", "year", "program", "department"]
+      "required": ["id", "year", "program", "department", "mode"]
     },
     "Report": {
       "title": "Report",
       "description": "OSU report document",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "institution": { "type": "string" },
-        "updatedAt": { "type": "number" }
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 250 },
+        "institution": { "type": "string", "minLength": 1, "maxLength": 250 },
+        "preparedBy": { "type": "string", "minLength": 1, "maxLength": 250 },
+        "date": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "status": {
+          "type": "string",
+          "enum": ["Draft", "Under Review", "Final", "Archived"]
+        },
+        "sections": { "type": "array" },
+        "customSummary": { "type": "string", "maxLength": 20000 },
+        "customFindings": { "type": "array" },
+        "customNotes": { "type": "array" },
+        "updatedAt": { "type": "number" },
+        "dataHash": { "type": "number" }
       },
-      "required": ["id", "name"]
+      "required": ["id", "name", "institution", "preparedBy", "date", "status", "sections", "updatedAt", "dataHash"]
     },
     "LoginLog": {
       "title": "LoginLog",
       "description": "Record of user login activity",
       "type": "object",
       "properties": {
-        "username": { "type": "string" },
+        "username": { "type": "string", "minLength": 1, "maxLength": 150 },
         "timestamp": { "type": "number" }
       },
       "required": ["username", "timestamp"]
@@ -60,7 +97,7 @@
   "firestore": {
     "/users/{userId}": {
       "schema": "User",
-      "description": "User profiles and RBAC roles"
+      "description": "User profiles, passwords, and RBAC roles"
     },
     "/records/{recordId}": {
       "schema": "Record",

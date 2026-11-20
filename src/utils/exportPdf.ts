@@ -1,6 +1,3 @@
-import jsPDF from 'jspdf';
-import { toJpeg, toCanvas } from 'html-to-image';
-
 /**
  * Raw font and layout CSS rules injected into the cloned DOM node during PDF export.
  * Defining these styles as raw CSS strings prevents html-to-image from accessing
@@ -50,6 +47,52 @@ export const RAW_FONT_CSS = `
   }
 `;
 
+export async function ensureImagesLoadedForPrint(root: HTMLElement | Document = document): Promise<void> {
+  const imgs = Array.from(root.querySelectorAll('img'));
+  await Promise.all(
+    imgs.map(async (img) => {
+      try {
+        if (!img.complete) {
+          await new Promise<void>((resolve) => {
+            img.addEventListener('load', () => resolve(), { once: true });
+            img.addEventListener('error', () => resolve(), { once: true });
+            setTimeout(resolve, 1500);
+          });
+        }
+        if (typeof img.decode === 'function') {
+          await img.decode().catch(() => {});
+        }
+      } catch {
+        // Ignore individual image decode failure
+      }
+    })
+  );
+}
+
+async function inlineImagesInClone(clone: HTMLElement): Promise<void> {
+  const imgs = Array.from(clone.querySelectorAll('img'));
+  await Promise.all(
+    imgs.map(async (img) => {
+      const src = img.getAttribute('src');
+      if (!src || src.startsWith('data:')) return;
+      try {
+        const res = await fetch(src);
+        if (!res.ok) return;
+        const blob = await res.blob();
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(String(reader.result));
+          reader.onerror = () => reject(new Error('Failed to read image blob'));
+          reader.readAsDataURL(blob);
+        });
+        img.setAttribute('src', dataUrl);
+      } catch (err) {
+        console.warn('Could not inline image for PDF:', src, err);
+      }
+    })
+  );
+}
+
 export async function exportReportToPDF(
   elementOrId: HTMLElement | string,
   fileName: string = 'OSU_Report.pdf'
@@ -69,6 +112,9 @@ export async function exportReportToPDF(
 
     // 1. Explicitly clone the DOM node for isolated styling and rendering
     const clone = element.cloneNode(true) as HTMLElement;
+
+    // 1b. Inline all images (including the OSU logo) as Base64 data URIs so they never drop in PDF capture
+    await inlineImagesInClone(clone);
 
     // 2. Explicitly inject custom CSS styles into the cloned DOM node
     // This avoids SecurityError by defining required font rules locally as raw CSS strings
@@ -109,6 +155,13 @@ export async function exportReportToPDF(
     stagingContainer.style.zIndex = '-9999';
     stagingContainer.appendChild(clone);
     document.body.appendChild(stagingContainer);
+
+    await ensureImagesLoadedForPrint(clone);
+
+    const [{ toJpeg, toCanvas }, { default: jsPDF }] = await Promise.all([
+      import('html-to-image'),
+      import('jspdf')
+    ]);
 
     // 5. Capture snapshot using html-to-image with skipFonts and fontEmbedCSS configured with raw CSS
     const options = {

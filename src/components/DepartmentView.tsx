@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { DepartmentSummary, UserAccount } from '../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { DepartmentSummary, UserAccount, parseAssignedDepartments, parseProgramLevelScopes } from '../types';
 import {
   AnalyticsResult,
   formatNum,
@@ -23,7 +23,6 @@ import {
   Loader2,
   Lock
 } from 'lucide-react';
-import { exportReportToPDF } from '../utils/exportPdf';
 
 interface DepartmentViewProps {
   analytics: AnalyticsResult;
@@ -48,18 +47,21 @@ export const DepartmentView: React.FC<DepartmentViewProps> = ({
   onDeleteDept,
   onResetData
 }) => {
-  const isScoped = Boolean(
-    currentUserAccount &&
-    currentUserAccount.programLevelScope &&
-    currentUserAccount.programLevelScope !== 'ALL'
+  const scopedPrograms = useMemo(
+    () => parseProgramLevelScopes(currentUserAccount?.programLevelScope),
+    [currentUserAccount?.programLevelScope]
   );
-  const scopedProgramLevel = isScoped ? currentUserAccount!.programLevelScope : null;
+  const isSingleProgramScoped = scopedPrograms.length === 1;
+  const isMultiProgramScoped = scopedPrograms.length > 1;
+  const scopedProgramLevel = isSingleProgramScoped ? scopedPrograms[0] : null;
 
-  const isDeptScoped = Boolean(
-    currentUserAccount?.assignedDepartment &&
-    currentUserAccount.assignedDepartment !== 'ALL'
+  const assignedDepts = useMemo(
+    () => parseAssignedDepartments(currentUserAccount?.assignedDepartment),
+    [currentUserAccount?.assignedDepartment]
   );
-  const scopedDepartment = isDeptScoped ? currentUserAccount!.assignedDepartment : null;
+  const isDeptScoped = assignedDepts.length > 0;
+  const isSingleAssignedDept = assignedDepts.length === 1;
+  const scopedDepartment = assignedDepts[0] || null;
   const isAdmin = currentUserAccount?.role === 'admin';
 
   const [search, setSearch] = useState('');
@@ -76,10 +78,21 @@ export const DepartmentView: React.FC<DepartmentViewProps> = ({
   const [showInlineRow, setShowInlineRow] = useState<boolean>(true);
   const [quickDeptName, setQuickDeptName] = useState<string>(scopedDepartment || '');
   const [quickProgLevel, setQuickProgLevel] = useState<string>(
-    scopedProgramLevel || PROGRAM_LEVELS[0]
+    scopedPrograms[0] || PROGRAM_LEVELS[0]
   );
   const [quickYears, setQuickYears] = useState<{ [year: number]: string }>({});
   const [quickError, setQuickError] = useState<string>('');
+
+  useEffect(() => {
+    if (scopedPrograms.length > 0) {
+      setQuickProgLevel((prev) => (scopedPrograms.includes(prev) ? prev : scopedPrograms[0]));
+      if (scopedPrograms.length === 1) {
+        setLevelFilter(scopedPrograms[0]);
+      } else {
+        setLevelFilter((prev) => (prev && !scopedPrograms.includes(prev) ? '' : prev));
+      }
+    }
+  }, [scopedPrograms]);
 
   const quickTotal = useMemo(() => {
     return years.reduce((acc, yr) => {
@@ -92,12 +105,22 @@ export const DepartmentView: React.FC<DepartmentViewProps> = ({
     if (e) e.preventDefault();
     setQuickError('');
 
-    const targetDept = isDeptScoped && scopedDepartment ? scopedDepartment : quickDeptName.trim();
+    const targetDept = isSingleAssignedDept
+      ? assignedDepts[0]
+      : assignedDepts.length > 1
+      ? (assignedDepts.includes(quickDeptName) ? quickDeptName : assignedDepts[0])
+      : quickDeptName.trim();
 
     if (!targetDept) {
       setQuickError('Please enter a Department name.');
       return;
     }
+
+    const targetProgLevel = isSingleProgramScoped
+      ? scopedPrograms[0]
+      : isMultiProgramScoped
+      ? (scopedPrograms.includes(quickProgLevel) ? quickProgLevel : scopedPrograms[0])
+      : quickProgLevel;
 
     const values = years.map((yr) => {
       const v = parseInt(quickYears[yr] || '0', 10);
@@ -110,7 +133,7 @@ export const DepartmentView: React.FC<DepartmentViewProps> = ({
     }
 
     if (onSaveDepartment) {
-      onSaveDepartment(targetDept, quickProgLevel, values);
+      onSaveDepartment(targetDept, targetProgLevel, values);
     }
 
     // Reset quick fields
@@ -182,6 +205,7 @@ export const DepartmentView: React.FC<DepartmentViewProps> = ({
 
   const handleDownloadPDF = async () => {
     setIsExporting(true);
+    const { exportReportToPDF } = await import('../utils/exportPdf');
     await exportReportToPDF('department-table-document', 'OSU_Department_List.pdf');
     setIsExporting(false);
   };
@@ -195,6 +219,7 @@ export const DepartmentView: React.FC<DepartmentViewProps> = ({
     } catch (e) {
       console.warn('System print failed or blocked by iframe:', e);
     }
+    const { exportReportToPDF } = await import('../utils/exportPdf');
     await exportReportToPDF('department-table-document', 'OSU_Department_List.pdf');
     setIsExporting(false);
   };
@@ -260,13 +285,15 @@ export const DepartmentView: React.FC<DepartmentViewProps> = ({
               </button>
             )}
 
-            <button
-              onClick={onAddDept}
-              className="px-4 py-2 bg-[#E0A526] hover:bg-[#D4991E] text-[#221702] text-xs sm:text-sm font-bold rounded-lg flex items-center gap-1.5 transition-colors shadow-md cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Department</span>
-            </button>
+            {isAdmin && (
+              <button
+                onClick={onAddDept}
+                className="px-4 py-2 bg-[#E0A526] hover:bg-[#D4991E] text-[#221702] text-xs sm:text-sm font-bold rounded-lg flex items-center gap-1.5 transition-colors shadow-md cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Department</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -288,11 +315,24 @@ export const DepartmentView: React.FC<DepartmentViewProps> = ({
             </div>
 
             {/* Level Filter */}
-            {isScoped ? (
+            {isSingleProgramScoped ? (
               <div className="py-2 px-3 bg-[#EFF6F3] dark:bg-white/5 border border-[#BFCDC8] dark:border-[#384E47] rounded-lg text-xs font-semibold text-[#0F4C3A] dark:text-[#A9D3C2] flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 <span>Scope: {scopedProgramLevel}</span>
               </div>
+            ) : isMultiProgramScoped ? (
+              <select
+                value={levelFilter}
+                onChange={(e) => setLevelFilter(e.target.value)}
+                className="py-2 px-3 bg-white dark:bg-[#16221F] border border-[#BFCDC8] dark:border-[#384E47] rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#E0A526]"
+              >
+                <option value="">All Assigned Levels ({scopedPrograms.length})</option>
+                {scopedPrograms.map((lvl) => (
+                  <option key={lvl} value={lvl}>
+                    {lvl}
+                  </option>
+                ))}
+              </select>
             ) : (
               <select
                 value={levelFilter}
@@ -311,17 +351,19 @@ export const DepartmentView: React.FC<DepartmentViewProps> = ({
 
           {/* Action buttons */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowInlineRow(!showInlineRow)}
-              className={`px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer border ${
-                showInlineRow
-                  ? 'bg-[#0F4C3A] text-white border-[#0F4C3A]'
-                  : 'bg-white dark:bg-white/5 border-[#C5D8CF] dark:border-white/10 text-[#283C35] dark:text-[#A9D3C2]'
-              }`}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{showInlineRow ? 'Hide Quick Add' : 'Quick Add Row'}</span>
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setShowInlineRow(!showInlineRow)}
+                className={`px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer border ${
+                  showInlineRow
+                    ? 'bg-[#0F4C3A] text-white border-[#0F4C3A]'
+                    : 'bg-white dark:bg-white/5 border-[#C5D8CF] dark:border-white/10 text-[#283C35] dark:text-[#A9D3C2]'
+                }`}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{showInlineRow ? 'Hide Quick Add' : 'Quick Add Row'}</span>
+              </button>
+            )}
 
             {isAdmin && (
               <button
@@ -420,19 +462,36 @@ export const DepartmentView: React.FC<DepartmentViewProps> = ({
                   <ArrowUpDown className="w-3 h-3" />
                 </button>
               </th>
+              {isAdmin && (
+                <th className="py-2.5 px-3 font-semibold text-center whitespace-nowrap">
+                  Actions
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-[#E3ECE7] dark:divide-[#273B35]">
-            {/* INLINE QUICK ADD ROW FOR DEPARTMENT LIST */}
-            {showInlineRow && (
+            {/* INLINE QUICK ADD ROW FOR DEPARTMENT LIST (Admin Only) */}
+            {isAdmin && showInlineRow && (
               <tr key="dept-quick-add-row" className="bg-[#EFF8F4] dark:bg-[#142922] border-b-2 border-[#1F7A5C]">
                 {/* Department Name */}
                 <td className="p-1.5 min-w-[180px]">
-                  {isDeptScoped ? (
+                  {isSingleAssignedDept ? (
                     <div className="w-full px-2 py-1 text-xs border border-emerald-300 dark:border-emerald-700 rounded bg-emerald-50 dark:bg-emerald-950/40 font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
                       <Building2 className="w-3.5 h-3.5 text-[#E0A526]" />
-                      <span>{scopedDepartment}</span>
+                      <span>{assignedDepts[0]}</span>
                     </div>
+                  ) : isDeptScoped ? (
+                    <select
+                      value={assignedDepts.includes(quickDeptName) ? quickDeptName : assignedDepts[0]}
+                      onChange={(e) => setQuickDeptName(e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-emerald-300 dark:border-emerald-700 rounded bg-emerald-50 dark:bg-emerald-950/40 font-bold text-emerald-900 dark:text-emerald-200"
+                    >
+                      {assignedDepts.map((dept) => (
+                        <option key={dept} value={dept}>
+                          {dept}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
                     <>
                       <input
@@ -457,10 +516,22 @@ export const DepartmentView: React.FC<DepartmentViewProps> = ({
 
                 {/* Program Level */}
                 <td className="p-1.5 min-w-[150px]">
-                  {isScoped ? (
+                  {isSingleProgramScoped ? (
                     <div className="w-full px-2 py-1 text-xs border border-[#A2C4B7] rounded bg-white dark:bg-[#101A17] font-semibold text-[#0F4C3A] dark:text-[#A9D3C2] truncate">
                       {scopedProgramLevel}
                     </div>
+                  ) : isMultiProgramScoped ? (
+                    <select
+                      value={scopedPrograms.includes(quickProgLevel) ? quickProgLevel : scopedPrograms[0]}
+                      onChange={(e) => setQuickProgLevel(e.target.value)}
+                      className="w-full px-1.5 py-1 text-xs border border-[#A2C4B7] rounded bg-white dark:bg-[#101A17] font-semibold text-[#0F4C3A] dark:text-[#A9D3C2]"
+                    >
+                      {scopedPrograms.map((lvl) => (
+                        <option key={lvl} value={lvl}>
+                          {lvl}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
                     <select
                       value={quickProgLevel}
@@ -506,12 +577,22 @@ export const DepartmentView: React.FC<DepartmentViewProps> = ({
                 </td>
 
                 {/* Action button */}
+                <td className="p-1.5 text-center">
+                  <button
+                    type="button"
+                    onClick={() => handleQuickAddDept()}
+                    className="px-2.5 py-1 bg-[#0F4C3A] hover:bg-[#1A5C49] text-white rounded font-bold text-xs inline-flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Add</span>
+                  </button>
+                </td>
               </tr>
             )}
 
             {filtered.length === 0 ? (
               <tr key="dept-empty-row">
-                <td colSpan={years.length + 4} className="py-8 text-center text-sm text-[#5B6B70]">
+                <td colSpan={years.length + 4 + (isAdmin ? 1 : 0)} className="py-8 text-center text-sm text-[#5B6B70]">
                   No departments match your search. Clear filters to view all entries.
                 </td>
               </tr>
@@ -531,6 +612,28 @@ export const DepartmentView: React.FC<DepartmentViewProps> = ({
                   <td className="py-2 px-3 text-right tabular-nums text-[#8D4258] dark:text-[#E88EA8] font-medium">
                     {formatPct(d.femaleShare2018)}
                   </td>
+                  {isAdmin && (
+                    <td className="py-2 px-3 text-center whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onEditDept(d)}
+                          className="text-[#1F7A5C] dark:text-[#A9D3C2] hover:underline font-medium p-1 cursor-pointer"
+                          title="Edit department intake"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDeleteDept(d)}
+                          className="text-red-600 hover:underline font-medium p-1 cursor-pointer"
+                          title="Delete department"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))
             )}
@@ -546,7 +649,7 @@ export const DepartmentView: React.FC<DepartmentViewProps> = ({
               <td className="py-2.5 px-3 text-right tabular-nums text-[#0F4C3A] dark:text-[#E0A526]">
                 {formatNum(filteredGrandTotal)}
               </td>
-              <td className="py-2.5 px-3 text-right tabular-nums text-[#8D4258] dark:text-[#E88EA8]" colSpan={1}>
+              <td className="py-2.5 px-3 text-right tabular-nums text-[#8D4258] dark:text-[#E88EA8]" colSpan={isAdmin ? 2 : 1}>
                 –
               </td>
             </tr>

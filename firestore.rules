@@ -1,8 +1,141 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Global default-deny safety net
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
+    }
+
+    // Shared validation primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidUser(data, userId) {
+      return data.keys().hasAll(['username', 'name', 'role', 'roleTitle', 'programLevelScope', 'description', 'avatarColor'])
+        && data.keys().hasOnly([
+          'username', 'name', 'role', 'roleTitle', 'programLevelScope',
+          'assignedDepartment', 'departmentOfferStatus', 'isActive',
+          'dataEntryCompleted', 'description', 'avatarColor', 'password',
+          'recoveryEmail', 'recoveryPhone', 'updatedAt'
+        ])
+        && data.username is string && data.username.size() >= 1 && data.username.size() <= 64
+        && data.username == userId && data.username.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 150
+        && data.role in [
+          'admin', 'registrar', 'all_viewer', 'program_applied', 'program_education',
+          'program_diploma', 'program_masters', 'program_phd', 'department_officer'
+        ]
+        && (data.role != 'admin' || userId == 'admin')
+        && data.roleTitle is string && data.roleTitle.size() >= 1 && data.roleTitle.size() <= 150
+        && data.programLevelScope is string && data.programLevelScope.size() >= 1 && data.programLevelScope.size() <= 500
+        && (!('assignedDepartment' in data) || data.assignedDepartment == null || (data.assignedDepartment is string && data.assignedDepartment.size() <= 1000))
+        && (!('departmentOfferStatus' in data) || data.departmentOfferStatus == null || data.departmentOfferStatus in ['assigned', 'offered', 'accepted', 'declined'])
+        && (!('isActive' in data) || data.isActive is bool)
+        && (!('dataEntryCompleted' in data) || data.dataEntryCompleted is bool)
+        && data.description is string && data.description.size() <= 500
+        && data.avatarColor is string && data.avatarColor.size() >= 1 && data.avatarColor.size() <= 30
+        && (!('password' in data) || data.password == null || (data.password is string && data.password.size() <= 128))
+        && (!('recoveryEmail' in data) || data.recoveryEmail == null || (userId == 'admin' && data.recoveryEmail is string && data.recoveryEmail.size() <= 150))
+        && (!('recoveryPhone' in data) || data.recoveryPhone == null || (userId == 'admin' && data.recoveryPhone is string && data.recoveryPhone.size() <= 40))
+        && (!('updatedAt' in data) || (data.updatedAt is number && data.updatedAt >= 0));
+    }
+
+    function isValidRecord(data, recordId) {
+      return data.keys().hasAll(['id', 'year', 'program', 'department', 'mode'])
+        && data.keys().hasOnly([
+          'id', 'year', 'program', 'department', 'mode',
+          'campus', 'male', 'female', 'total', 'sourceCell',
+          'approvalStatus', 'submittedBy', 'updatedAt'
+        ])
+        && data.id is string && data.id == recordId && data.id.size() >= 1 && data.id.size() <= 128
+        && data.year is number && data.year >= 1900 && data.year <= 2200
+        && data.program is string && data.program.size() >= 1 && data.program.size() <= 150
+        && data.department is string && data.department.size() >= 1 && data.department.size() <= 200
+        && data.mode is string && data.mode.size() >= 1 && data.mode.size() <= 100
+        && (!('campus' in data) || data.campus == null || (data.campus is string && data.campus.size() <= 150))
+        && (!('male' in data) || data.male == null || (data.male is number && data.male >= 0 && data.male <= 1000000))
+        && (!('female' in data) || data.female == null || (data.female is number && data.female >= 0 && data.female <= 1000000))
+        && (!('total' in data) || data.total == null || (data.total is number && data.total >= 0 && data.total <= 2000000))
+        && (!('sourceCell' in data) || data.sourceCell == null || (data.sourceCell is string && data.sourceCell.size() <= 100))
+        && (!('approvalStatus' in data) || data.approvalStatus == null || data.approvalStatus in ['approved', 'pending', 'rejected'])
+        && (!('submittedBy' in data) || data.submittedBy == null || (data.submittedBy is string && data.submittedBy.size() <= 64))
+        && (!('updatedAt' in data) || (data.updatedAt is number && data.updatedAt >= 0));
+    }
+
+    function isValidReport(data, reportId) {
+      return data.keys().hasAll(['id', 'name', 'institution', 'preparedBy', 'date', 'status', 'sections', 'updatedAt', 'dataHash'])
+        && data.keys().hasOnly([
+          'id', 'name', 'institution', 'preparedBy', 'date', 'status',
+          'sections', 'customSummary', 'customFindings', 'customNotes', 'updatedAt', 'dataHash'
+        ])
+        && data.id is string && data.id == reportId && data.id.size() >= 1 && data.id.size() <= 128
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 250
+        && data.institution is string && data.institution.size() >= 1 && data.institution.size() <= 250
+        && data.preparedBy is string && data.preparedBy.size() >= 1 && data.preparedBy.size() <= 250
+        && data.date is string && data.date.size() >= 1 && data.date.size() <= 100
+        && data.status in ['Draft', 'Under Review', 'Final', 'Archived']
+        && data.sections is list && data.sections.size() <= 50 && (data.sections.size() == 0 || data.sections[0] is map)
+        && (!('customSummary' in data) || data.customSummary == null || (data.customSummary is string && data.customSummary.size() <= 20000))
+        && (!('customFindings' in data) || data.customFindings == null || (data.customFindings is list && data.customFindings.size() <= 100 && (data.customFindings.size() == 0 || data.customFindings[0] is string)))
+        && (!('customNotes' in data) || data.customNotes == null || (data.customNotes is list && data.customNotes.size() <= 100 && (data.customNotes.size() == 0 || data.customNotes[0] is string)))
+        && data.updatedAt is number && data.updatedAt >= 0
+        && data.dataHash is number;
+    }
+
+    function isValidLoginLog(data) {
+      return data.keys().hasAll(['username', 'timestamp'])
+        && data.keys().hasOnly(['username', 'timestamp'])
+        && data.username is string && data.username.size() >= 1 && data.username.size() <= 150
+        && data.timestamp is number && data.timestamp >= 0;
+    }
+
+    // Connection check document used on app startup
+    match /test/{docId} {
+      allow get: if docId == 'connection';
+    }
+
+    // Institutional user accounts & cross-device password sync
+    match /users/{userId} {
+      allow list: if true;
+      allow get: if isValidId(userId);
+      allow create: if isValidId(userId) && isValidUser(incoming(), userId);
+      allow update: if isValidId(userId) && isValidUser(incoming(), userId) && incoming().username == existing().username && (userId != 'admin' || incoming().role == 'admin');
+      allow delete: if isValidId(userId) && userId != 'admin';
+    }
+
+    // Student enrollment records
+    match /records/{recordId} {
+      allow list: if true;
+      allow get: if isValidId(recordId);
+      allow create: if isValidId(recordId) && isValidRecord(incoming(), recordId);
+      allow update: if isValidId(recordId) && isValidRecord(incoming(), recordId) && incoming().id == existing().id;
+      allow delete: if isValidId(recordId);
+    }
+
+    // Institutional report documents
+    match /reports/{reportId} {
+      allow list: if true;
+      allow get: if isValidId(reportId);
+      allow create: if isValidId(reportId) && isValidReport(incoming(), reportId);
+      allow update: if isValidId(reportId) && isValidReport(incoming(), reportId) && incoming().id == existing().id;
+      allow delete: if isValidId(reportId);
+    }
+
+    // Login activity logs
+    match /loginLogs/{logId} {
+      allow list: if true;
+      allow get: if isValidId(logId);
+      allow create: if isValidId(logId) && isValidLoginLog(incoming());
     }
   }
 }
